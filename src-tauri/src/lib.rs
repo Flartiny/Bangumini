@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use tauri::Manager;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpListener;
 
 const CLIENT_ID: &str = "bgm61886a103fe0672c1";
@@ -140,29 +140,31 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
         ("redirect_uri", "http://localhost:19840/callback"),
     ];
 
-    match client.post(BANGUMI_TOKEN).form(&params).send().await {
-        Ok(res) => {
-            if res.status().is_success() {
-                match res.json::<serde_json::Value>().await {
-                    Ok(data) => Ok(OAuthResult {
-                        success: true,
-                        error: None,
-                        access_token: data["access_token"].as_str().map(String::from),
-                        refresh_token: data["refresh_token"].as_str().map(String::from),
-                        expires_at: data["expires_in"].as_u64().map(|e| {
-                            std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + e
-                        }),
-                    }),
-                    Err(e) => Ok(OAuthResult { success: false, error: Some(format!("Parse: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
-                }
-            } else {
-                let body = res.text().await.unwrap_or_default();
-                Ok(OAuthResult { success: false, error: Some(format!("Token fail: {} {}", res.status(), body)), access_token: None, refresh_token: None, expires_at: None }),
-            }
-        }
-        Err(e) => Ok(OAuthResult { success: false, error: Some(format!("Request: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
+    let token_res = client.post(BANGUMI_TOKEN).form(&params).send().await;
+    let res = match token_res {
+        Ok(r) => r,
+        Err(e) => return Ok(OAuthResult { success: false, error: Some(format!("Request: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
+    };
+
+    if !res.status().is_success() {
+        let body = res.text().await.unwrap_or_default();
+        return Ok(OAuthResult { success: false, error: Some(format!("Token fail: {}", body)), access_token: None, refresh_token: None, expires_at: None });
     }
+
+    let data: serde_json::Value = match res.json().await {
+        Ok(d) => d,
+        Err(e) => return Ok(OAuthResult { success: false, error: Some(format!("Parse: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
+    };
+
+    Ok(OAuthResult {
+        success: true,
+        error: None,
+        access_token: data["access_token"].as_str().map(String::from),
+        refresh_token: data["refresh_token"].as_str().map(String::from),
+        expires_at: data["expires_in"].as_u64().map(|e| {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + e
+        }),
+    })
 }
 
 pub fn run() {
