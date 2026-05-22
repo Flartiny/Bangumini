@@ -6,15 +6,6 @@
     "core:default",
     "shell:default",
     "global-shortcut:default",
-    "autostart:default",
-    "http:default",
-    {
-      "identifier": "http:default",
-      "allow": [
-        { "url": "https://api.bgm.tv/**" },
-        { "url": "https://bgm.tv/**" },
-        { "url": "https://next.bgm.tv/**" }
-      ]
-    }
+    "autostart:default"
   ]
 }
