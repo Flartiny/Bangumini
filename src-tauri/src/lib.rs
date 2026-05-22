@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use tauri::Manager;
-use tauri_plugin_shell::ShellExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpListener;
 
@@ -69,7 +68,7 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
     );
 
     // Open browser
-    app.shell().open(&auth_url, None).map_err(|e| e.to_string())?;
+    open::that(&auth_url).map_err(|e| e.to_string())?;
 
     // Start local HTTP server for callback
     let listener = TcpListener::bind("127.0.0.1:19840").await.map_err(|e| e.to_string())?;
@@ -109,16 +108,6 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
         }
     }
 
-    let html = if code.is_empty() {
-        "<html><body><h1>授权失败</h1><p>未收到授权码。请关闭此窗口。</p></body></html>"
-    } else if returned_state != state {
-        "<html><body><h1>授权失败</h1><p>状态不匹配。请关闭此窗口。</p></body></html>"
-    } else {
-        "<html><body><h1>授权成功！</h1><p>可以关闭此窗口了。</p></body></html>"
-    };
-
-    // We need the underlying stream back for writing
-    // Re-accept for the response, or simpler: just close the listener and return
     drop(listener);
 
     if code.is_empty() || returned_state != state {
@@ -175,7 +164,6 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
-        .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![fetch_proxy, start_oauth, get_shortcut, set_autostart])
         .setup(|app| {
             use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};

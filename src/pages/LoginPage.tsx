@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { setToken } from "../api/oauth";
-import { isTauri } from "../api/tauri-fetch";
 
 export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   const [token, setTokenText] = useState("");
@@ -14,7 +13,6 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   }
 
   async function handleOAuthLogin() {
-    if (!isTauri()) return;
     setLoading(true);
     try {
       const { invoke } = await import("@tauri-apps/api/core");
@@ -51,15 +49,13 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
       <div className="w-96 p-6 bg-gray-800/50 rounded-xl border border-gray-700 space-y-4">
         <h1 className="text-xl font-semibold text-center">登录 Bangumi</h1>
 
-        {isTauri() && (
-          <button
-            onClick={handleOAuthLogin}
-            disabled={loading}
-            className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-md text-sm font-medium transition-colors"
-          >
-            {loading ? "等待授权…" : "通过浏览器授权登录"}
-          </button>
-        )}
+        <button
+          onClick={handleOAuthLogin}
+          disabled={loading}
+          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-md text-sm font-medium transition-colors"
+        >
+          {loading ? "等待授权…" : "通过浏览器授权登录"}
+        </button>
 
         <div className="flex items-center gap-2">
           <div className="flex-1 h-px bg-gray-600" />

@@ -4,7 +4,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "shell:default",
     "global-shortcut:default",
     "autostart:default"
   ]
