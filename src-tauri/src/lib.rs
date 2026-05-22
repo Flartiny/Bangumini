@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use tauri::Manager;
+use tauri_plugin_opener::OpenerExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpListener;
 
@@ -68,7 +69,7 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
     );
 
     // Open browser
-    open::that(&auth_url).map_err(|e| e.to_string())?;
+    app.opener().open_url(&auth_url, None::<tauri_plugin_opener::OpenUrlOptions>).map_err(|e| e.to_string())?;
 
     // Start local HTTP server for callback
     let listener = TcpListener::bind("127.0.0.1:19840").await.map_err(|e| e.to_string())?;
@@ -160,6 +161,7 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
