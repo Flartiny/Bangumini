@@ -11,7 +11,7 @@ export default function SearchPage() {
   const initialQ = searchParams.get("q") ?? "";
   const [keyword, setKeyword] = useState(initialQ);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ["search", keyword, typeFilter],
     queryFn: () =>
       searchSubjects({
@@ -48,9 +48,10 @@ export default function SearchPage() {
         </select>
       </div>
 
+      {!keyword && <p className="text-gray-500 text-sm">输入关键词开始搜索</p>}
+      {error && <p className="text-red-400 text-sm">搜索出错: {String(error)}</p>}
       {isLoading && <p className="text-gray-500 text-sm">搜索中…</p>}
-
-      {!isLoading && subjects.length === 0 && keyword && (
+      {!isLoading && !error && keyword && subjects.length === 0 && (
         <p className="text-gray-500 text-sm">无结果</p>
       )}
 

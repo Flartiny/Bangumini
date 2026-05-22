@@ -1,8 +1,7 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { setTokenProvider } from "@shared/api/client";
-import { getAccessToken } from "./api/oauth";
-
-setTokenProvider(async () => getAccessToken());
+import { getAccessToken, fetchAndCacheUsername } from "./api/oauth";
 import { useAuth } from "./hooks/useAuth";
 import Layout from "./components/Layout";
 import SearchPage from "./pages/SearchPage";
@@ -12,8 +11,16 @@ import SubjectDetailPage from "./pages/SubjectDetailPage";
 import LoginPage from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
 
+setTokenProvider(async () => getAccessToken());
+
 export default function App() {
   const { authLoading, authenticated, handleLogin } = useAuth({ autoLogin: true });
+
+  useEffect(() => {
+    if (authenticated) {
+      fetchAndCacheUsername().catch(() => {});
+    }
+  }, [authenticated]);
 
   if (authLoading) {
     return (

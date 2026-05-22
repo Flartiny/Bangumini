@@ -12,6 +12,7 @@ import {
 } from "@shared/api/client";
 import { CollectionTypeLabel } from "@shared/api/types";
 import type { CollectionType } from "@shared/api/types";
+import { getUsername } from "../api/oauth";
 
 export default function SubjectDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,7 +45,9 @@ export default function SubjectDetailPage() {
     queryKey: ["collection", subjectId],
     queryFn: async () => {
       try {
-        return await getUserCollection("", subjectId);
+        const uname = getUsername();
+        if (!uname) return null;
+        return await getUserCollection(uname, subjectId);
       } catch {
         return null;
       }

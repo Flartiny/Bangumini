@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getAllUserCollections, getCalendar } from "@shared/api/client";
+import { getAllUserCollections, getCalendar, getUserCollections } from "@shared/api/client";
 import { SubjectTypeLabel } from "@shared/api/types";
 import {
   sortCollections,
@@ -10,6 +10,7 @@ import {
   WEEKDAY_CN,
 } from "@shared/sort-collections";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
+import { getUsername } from "../api/oauth";
 
 const LIMIT = 20;
 
@@ -21,15 +22,18 @@ export default function CollectionsPage() {
   const isWatching = collectionType === "3";
   const today = getTodayBangumiWeekday();
 
-  const { data: collData, isLoading } = useQuery({
-    queryKey: ["collections", collectionType],
+  const uname = getUsername();
+
+  const { data: collData, isLoading, error } = useQuery({
+    queryKey: ["collections", collectionType, uname],
     queryFn: async () => {
+      if (!uname) return { data: [], total: 0 };
       if (collectionType === "3") {
-        return getAllUserCollections({ username: "", type: 3 });
+        return getAllUserCollections({ username: uname, type: 3 });
       }
-      const mod = await import("@shared/api/client");
-      return mod.getUserCollections({ username: "", type: parseInt(collectionType), limit: 200 });
+      return getUserCollections({ username: uname, type: parseInt(collectionType), limit: 200 });
     },
+    enabled: !!uname,
     staleTime: 60_000,
   });
 
@@ -91,7 +95,9 @@ export default function CollectionsPage() {
         </select>
       </div>
 
+      {error && <p className="text-red-400 text-sm">加载出错: {String(error)}</p>}
       {isLoading && <p className="text-gray-500 text-sm">加载中…</p>}
+      {!uname && !isLoading && <p className="text-gray-500 text-sm">正在获取用户信息…</p>}
 
       <div className="text-xs text-gray-500 mb-2">
         {searchText ? `搜索 · 共 ${filtered.length} 条` : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条`}
