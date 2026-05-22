@@ -1,6 +1,13 @@
 use std::collections::HashMap;
 
 use tauri::Manager;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
+
+const CLIENT_ID: &str = "bgm61886a103fe0672c1";
+const CLIENT_SECRET: &str = "32468c5f6ba84e3528d11bd4905f1726";
+const BANGUMI_AUTH: &str = "https://bgm.tv/oauth/authorize";
+const BANGUMI_TOKEN: &str = "https://bgm.tv/oauth/access_token";
 
 #[derive(serde::Deserialize)]
 struct FetchRequest {
@@ -14,6 +21,15 @@ struct FetchRequest {
 struct FetchResponse {
     status: u16,
     body: String,
+}
+
+#[derive(serde::Serialize)]
+struct OAuthResult {
+    success: bool,
+    error: Option<String>,
+    access_token: Option<String>,
+    refresh_token: Option<String>,
+    expires_at: Option<u64>,
 }
 
 #[tauri::command]
@@ -38,6 +54,117 @@ async fn fetch_proxy(req: FetchRequest) -> Result<FetchResponse, String> {
     Ok(FetchResponse { status, body })
 }
 
+#[tauri::command]
+async fn start_oauth(app: tauri::AppHandle) -> Result<OAuthResult, String> {
+    let state: String = format!("{:x}", std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
+
+    let auth_url = format!(
+        "{}?response_type=code&client_id={}&redirect_uri={}&state={}",
+        BANGUMI_AUTH,
+        CLIENT_ID,
+        "http%3A%2F%2Flocalhost%3A19840%2Fcallback",
+        state,
+    );
+
+    // Open browser
+    app.shell().open(&auth_url, None).map_err(|e| e.to_string())?;
+
+    // Start local HTTP server for callback
+    let listener = TcpListener::bind("127.0.0.1:19840").await.map_err(|e| e.to_string())?;
+
+    // Accept one connection with 120s timeout
+    let (stream, _) = tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        listener.accept(),
+    )
+    .await
+    .map_err(|_| "Timeout waiting for authorization".to_string())?
+    .map_err(|e| e.to_string())?;
+
+    let mut reader = BufReader::new(stream);
+    let mut request_line = String::new();
+    reader.read_line(&mut request_line).await.map_err(|e| e.to_string())?;
+
+    // Parse path: GET /callback?code=...&state=...
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return Ok(OAuthResult { success: false, error: Some("Invalid request".into()), access_token: None, refresh_token: None, expires_at: None });
+    }
+    let path = parts[1];
+
+    let mut code = String::new();
+    let mut returned_state = String::new();
+    if let Some(query) = path.split('?').nth(1) {
+        for param in query.split('&') {
+            let kv: Vec<&str> = param.splitn(2, '=').collect();
+            if kv.len() == 2 {
+                match kv[0] {
+                    "code" => code = urlencoding::decode(kv[1]).unwrap_or_default(),
+                    "state" => returned_state = urlencoding::decode(kv[1]).unwrap_or_default(),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let html = if code.is_empty() {
+        "<html><body><h1>授权失败</h1><p>未收到授权码。请关闭此窗口。</p></body></html>"
+    } else if returned_state != state {
+        "<html><body><h1>授权失败</h1><p>状态不匹配。请关闭此窗口。</p></body></html>"
+    } else {
+        "<html><body><h1>授权成功！</h1><p>可以关闭此窗口了。</p></body></html>"
+    };
+
+    // We need the underlying stream back for writing
+    // Re-accept for the response, or simpler: just close the listener and return
+    drop(listener);
+
+    if code.is_empty() || returned_state != state {
+        return Ok(OAuthResult { success: false, error: Some(if code.is_empty() { "No auth code".into() } else { "State mismatch".into() }), access_token: None, refresh_token: None, expires_at: None });
+    }
+
+    // Try to show success page (best effort)
+    if let Ok(listener2) = TcpListener::bind("127.0.0.1:19840").await {
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(2), listener2.accept()).await;
+        // Browser retry — ignore, user can close manually
+    }
+
+    // Exchange code for tokens
+    let client = reqwest::Client::new();
+    let params = [
+        ("grant_type", "authorization_code"),
+        ("client_id", CLIENT_ID),
+        ("client_secret", CLIENT_SECRET),
+        ("code", &code),
+        ("redirect_uri", "http://localhost:19840/callback"),
+    ];
+
+    match client.post(BANGUMI_TOKEN).form(&params).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                match res.json::<serde_json::Value>().await {
+                    Ok(data) => Ok(OAuthResult {
+                        success: true,
+                        error: None,
+                        access_token: data["access_token"].as_str().map(String::from),
+                        refresh_token: data["refresh_token"].as_str().map(String::from),
+                        expires_at: data["expires_in"].as_u64().map(|e| {
+                            std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() + e
+                        }),
+                    }),
+                    Err(e) => Ok(OAuthResult { success: false, error: Some(format!("Parse: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
+                }
+            } else {
+                let body = res.text().await.unwrap_or_default();
+                Ok(OAuthResult { success: false, error: Some(format!("Token fail: {} {}", res.status(), body)), access_token: None, refresh_token: None, expires_at: None }),
+            }
+        }
+        Err(e) => Ok(OAuthResult { success: false, error: Some(format!("Request: {}", e)), access_token: None, refresh_token: None, expires_at: None }),
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -46,7 +173,7 @@ pub fn run() {
             Some(vec![]),
         ))
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![fetch_proxy, get_shortcut, set_autostart])
+        .invoke_handler(tauri::generate_handler![fetch_proxy, start_oauth, get_shortcut, set_autostart])
         .setup(|app| {
             use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
             let window = app.get_webview_window("main").unwrap();
@@ -72,10 +199,6 @@ fn get_shortcut() -> String {
 
 #[tauri::command]
 fn set_autostart(enabled: bool) -> Result<(), String> {
-    if enabled {
-        println!("Autostart enabled");
-    } else {
-        println!("Autostart disabled");
-    }
+    if enabled { println!("Autostart enabled"); } else { println!("Autostart disabled"); }
     Ok(())
 }

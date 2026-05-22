@@ -11,7 +11,7 @@ import SubjectDetailPage from "./pages/SubjectDetailPage";
 import LoginPage from "./pages/LoginPage";
 import SettingsPage from "./pages/SettingsPage";
 
-setTokenProvider(async () => getAccessToken());
+setTokenProvider(getAccessToken);
 
 export default function App() {
   const { authLoading, authenticated, handleLogin } = useAuth({ autoLogin: true });
