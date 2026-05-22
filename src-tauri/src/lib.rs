@@ -1,3 +1,4 @@
+
 use tauri::Manager;
 
 #[tauri::command]
@@ -22,24 +23,22 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(&[]),
+            Some(vec![]),
         ))
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![get_shortcut, set_autostart])
         .setup(|app| {
+            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
             let window = app.get_webview_window("main").unwrap();
-            app.handle().plugin(
-                tauri_plugin_global_shortcut::Builder::new()
-                    .with_handler(move |_app, _shortcut, _event| {
-                        if let Ok(true) = window.is_visible() {
-                            let _ = window.hide();
-                        } else {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                        }
-                    })
-                    .build(),
-            )?;
+            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyB);
+            app.global_shortcut().on_shortcut(shortcut, move |_app, _s, _e| {
+                if let Ok(true) = window.is_visible() {
+                    let _ = window.hide();
+                } else {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            })?;
             Ok(())
         })
         .run(tauri::generate_context!())

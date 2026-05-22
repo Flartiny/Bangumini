@@ -25,9 +25,6 @@
     }
   },
   "plugins": {
-    "global-shortcut": {
-      "shortcuts": ["Ctrl+Shift+B"]
-    },
     "autostart": {
       "enabled": false
     }
