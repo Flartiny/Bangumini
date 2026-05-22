@@ -71,8 +71,14 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<AuthUrlResult, String> {
     let state: String = format!("{:x}", std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos());
 
+    println!("[OAuth] Starting OAuth flow with state: {}", state);
+
     // Start server FIRST to avoid race condition
-    let listener = TcpListener::bind("127.0.0.1:19840").await.map_err(|e| e.to_string())?;
+    let listener = TcpListener::bind("127.0.0.1:19840").await.map_err(|e| {
+        println!("[OAuth] Failed to bind listener: {}", e);
+        e.to_string()
+    })?;
+    println!("[OAuth] Server listening on 127.0.0.1:19840");
 
     // Store listener in app state
     let oauth_state = app.state::<Arc<Mutex<OAuthState>>>();
@@ -83,7 +89,13 @@ async fn start_oauth(app: tauri::AppHandle) -> Result<AuthUrlResult, String> {
         BANGUMI_AUTH, CLIENT_ID, "http%3A%2F%2Flocalhost%3A19840%2Fcallback", state,
     );
 
-    app.opener().open_url(&auth_url, None::<&str>).map_err(|e| e.to_string())?;
+    println!("[OAuth] Opening browser with URL: {}", auth_url);
+    let result = app.opener().open_url(&auth_url, None::<&str>);
+    match &result {
+        Ok(_) => println!("[OAuth] Browser opened successfully"),
+        Err(e) => println!("[OAuth] Failed to open browser: {}", e),
+    }
+    result.map_err(|e| e.to_string())?;
 
     Ok(AuthUrlResult { state })
 }
