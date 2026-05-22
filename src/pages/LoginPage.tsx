@@ -13,13 +13,17 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
   }
 
   async function handleOAuthLogin() {
+    console.log("[OAuth] Button clicked, starting flow...");
     setLoading(true);
     try {
+      console.log("[OAuth] Importing Tauri API...");
       const { invoke } = await import("@tauri-apps/api/core");
+      console.log("[OAuth] Tauri API imported successfully");
 
-      console.log("[OAuth] Starting OAuth flow...");
-      // Step 1: Start OAuth (generates URL + opens browser via Rust)
-      const { state } = await invoke<{ state: string }>("start_oauth");
+      console.log("[OAuth] Calling start_oauth...");
+      const startResult = await invoke<{ state: string }>("start_oauth");
+      console.log("[OAuth] start_oauth returned:", startResult);
+      const { state } = startResult;
       console.log("[OAuth] OAuth started with state:", state);
 
       // Step 2: Wait for callback
@@ -47,9 +51,10 @@ export default function LoginPage({ onLogin }: { onLogin: () => void }) {
         alert("授权失败: " + (result.error ?? "未知错误"));
       }
     } catch (e) {
-      console.error("[OAuth] Error:", e);
+      console.error("[OAuth] Error caught:", e);
       alert("OAuth 出错: " + String(e));
     } finally {
+      console.log("[OAuth] Flow finished, resetting loading state");
       setLoading(false);
     }
   }
