@@ -24,9 +24,5 @@
       "csp": null
     }
   },
-  "plugins": {
-    "autostart": {
-      "enabled": false
-    }
-  }
+  "plugins": {}
 }
