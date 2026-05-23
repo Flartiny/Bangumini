@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Bangumini",
-        "width": 1200,
-        "height": 800,
+        "width": 960,
+        "height": 640,
         "center": true,
         "resizable": false,
         "decorations": false,
