@@ -204,8 +204,8 @@ pub fn run() {
         ))
         .invoke_handler(tauri::generate_handler![fetch_proxy, start_oauth, wait_oauth_callback, get_shortcut, set_autostart])
         .setup(|app| {
-            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
-            use tauri::tray::TrayIconBuilder;
+            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+            use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
             use tauri::menu::{MenuBuilder, MenuItemBuilder};
 
             // Initialize OAuth state
@@ -261,7 +261,12 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(move |tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
                         let w = tray.app_handle().get_webview_window("main").unwrap();
                         if w.is_visible().unwrap_or(false) {
                             let _ = w.hide();
@@ -276,7 +281,10 @@ pub fn run() {
             let w_shortcut = window.clone();
             let g_shortcut = show_guard.clone();
             let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyB);
-            app.global_shortcut().on_shortcut(shortcut, move |_app, _s, _e| {
+            app.global_shortcut().on_shortcut(shortcut, move |_app, _s, event| {
+                if event.state() != ShortcutState::Pressed {
+                    return;
+                }
                 if let Ok(true) = w_shortcut.is_visible() {
                     let _ = w_shortcut.hide();
                 } else {
