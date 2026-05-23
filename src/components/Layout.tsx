@@ -16,6 +16,26 @@ const COLLECTION_TYPES = [
   { value: "5", label: "抛弃" },
 ];
 
+const SUBJECT_TYPES = [
+  { value: "", label: "全部" },
+  { value: "2", label: "动画" },
+  { value: "1", label: "书籍" },
+  { value: "3", label: "音乐" },
+  { value: "4", label: "游戏" },
+  { value: "6", label: "三次元" },
+];
+
+const CALENDAR_WEEKDAYS = [
+  { value: "", label: "全部" },
+  { value: "1", label: "周一" },
+  { value: "2", label: "周二" },
+  { value: "3", label: "周三" },
+  { value: "4", label: "周四" },
+  { value: "5", label: "周五" },
+  { value: "6", label: "周六" },
+  { value: "7", label: "周日" },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -24,6 +44,7 @@ export default function Layout() {
 
   const isSearchPage = location.pathname === "/";
   const isCollections = location.pathname === "/collections";
+  const isCalendar = location.pathname === "/calendar";
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -49,19 +70,76 @@ export default function Layout() {
   const headerInput = (() => {
     if (isSearchPage) {
       const q = searchParams.get("q") ?? "";
+      const stype = searchParams.get("stype") ?? "2";
       return (
         <div className="ml-auto flex gap-2">
           <input
             ref={inputRef}
+            key={`search-${q}`}
             defaultValue={q}
-            placeholder="搜索条目（支持拼音）…"
-            className="w-64 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            placeholder="搜索条目…"
+            className="w-48 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                setSearchParams({ q: e.currentTarget.value.trim() });
+                const params = new URLSearchParams();
+                params.set("q", e.currentTarget.value.trim());
+                if (stype) params.set("stype", stype);
+                setSearchParams(params);
               }
             }}
           />
+          <select
+            value={stype}
+            onChange={(e) => {
+              const params = new URLSearchParams(searchParams);
+              if (e.target.value) params.set("stype", e.target.value);
+              else params.delete("stype");
+              setSearchParams(params, { replace: true });
+            }}
+            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+          >
+            {SUBJECT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (isCalendar) {
+      const filter = searchParams.get("filter") ?? "";
+      const weekday = searchParams.get("weekday") ?? "";
+      return (
+        <div className="ml-auto flex gap-2">
+          <input
+            ref={inputRef}
+            key={`cal-${filter}`}
+            defaultValue={filter}
+            placeholder="筛选日历…"
+            className="w-44 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            onChange={(e) => {
+              const v = e.target.value;
+              const params = new URLSearchParams(searchParams);
+              if (v) params.set("filter", v);
+              else params.delete("filter");
+              setSearchParams(params, { replace: true });
+            }}
+          />
+          <select
+            value={weekday}
+            onChange={(e) => {
+              const params = new URLSearchParams(searchParams);
+              if (e.target.value) params.set("weekday", e.target.value);
+              else params.delete("weekday");
+              params.delete("filter");
+              setSearchParams(params, { replace: true });
+            }}
+            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+          >
+            {CALENDAR_WEEKDAYS.map((d) => (
+              <option key={d.value} value={d.value}>{d.label}</option>
+            ))}
+          </select>
         </div>
       );
     }
@@ -73,9 +151,10 @@ export default function Layout() {
         <div className="ml-auto flex gap-2">
           <input
             ref={inputRef}
+            key={`col-${filter}`}
             defaultValue={filter}
-            placeholder="筛选条目（支持拼音）…"
-            className="w-48 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            placeholder="筛选收藏…"
+            className="w-44 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
             onChange={(e) => {
               const v = e.target.value;
               const params = new URLSearchParams(searchParams);

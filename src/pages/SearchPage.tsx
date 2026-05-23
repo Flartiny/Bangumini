@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { searchSubjects } from "@shared/api/client";
@@ -7,8 +6,8 @@ import { SubjectTypeLabel } from "@shared/api/types";
 export default function SearchPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [typeFilter, setTypeFilter] = useState("2");
   const keyword = searchParams.get("q") ?? "";
+  const typeFilter = searchParams.get("stype") ?? "";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", keyword, typeFilter],
@@ -23,35 +22,20 @@ export default function SearchPage() {
 
   const subjects = data?.data ?? [];
 
+  if (!keyword) {
+    return <p className="p-4 text-gray-500 text-sm">输入关键词开始搜索</p>;
+  }
+
+  if (error) return <p className="p-4 text-red-400 text-sm">搜索出错: {String(error)}</p>;
+  if (isLoading) return <p className="p-4 text-gray-500 text-sm">搜索中…</p>;
+
   return (
     <div className="p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
-        >
-          <option value="">全部</option>
-          <option value="2">动画</option>
-          <option value="1">书籍</option>
-          <option value="3">音乐</option>
-          <option value="4">游戏</option>
-          <option value="6">三次元</option>
-        </select>
-        <span className="text-xs text-gray-500 ml-auto">
-          在顶部搜索框输入关键词后按回车
-        </span>
-      </div>
-
-      {!keyword && <p className="text-gray-500 text-sm">输入关键词开始搜索</p>}
-      {error && <p className="text-red-400 text-sm">搜索出错: {String(error)}</p>}
-      {isLoading && <p className="text-gray-500 text-sm">搜索中…</p>}
-      {!isLoading && !error && keyword && subjects.length === 0 && (
+      {subjects.length === 0 ? (
         <p className="text-gray-500 text-sm">无结果</p>
-      )}
-
-      <div className="space-y-1">
-        {subjects.map((s) => (
+      ) : (
+        <div className="space-y-1">
+          {subjects.map((s) => (
             <div
               key={s.id}
               onClick={() => navigate(`/subject/${s.id}`)}
@@ -69,8 +53,9 @@ export default function SearchPage() {
                 <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
               )}
             </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
