@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getCalendar } from "@shared/api/client";
 import { WEEKDAY_CN, getTodayBangumiWeekday } from "@shared/sort-collections";
+import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import type { SubjectSmall } from "@shared/api/types";
 
 export default function CalendarPage() {
@@ -35,18 +36,24 @@ export default function CalendarPage() {
     return items;
   }, [calendar]);
 
-  // Filtered items when filtering is active
+  // Filtered items when filtering is active, sorted by weekday
   const filteredItems = useMemo(() => {
     if (!isFiltering) return [];
-    return allItems.filter((item) => {
+    const filtered = allItems.filter((item) => {
       if (filterWeekday && item.weekday !== parseInt(filterWeekday)) return false;
       if (filterText) {
         const lower = filterText.toLowerCase();
-        const name = (item.name_cn || item.name || "").toLowerCase();
-        return name.includes(lower);
+        const keywords = buildSubjectKeywords(item.name_cn, item.name);
+        return (
+          (item.name_cn || "").toLowerCase().includes(lower) ||
+          (item.name || "").toLowerCase().includes(lower) ||
+          keywords.some((k) => k.toLowerCase().includes(lower))
+        );
       }
       return true;
     });
+    filtered.sort((a, b) => a.weekday - b.weekday);
+    return filtered;
   }, [allItems, filterText, filterWeekday, isFiltering]);
 
   // In normal mode, the items for the current day
@@ -126,39 +133,60 @@ export default function CalendarPage() {
             {filteredItems.length === 0 ? (
               <p className="text-sm text-gray-500">无匹配条目</p>
             ) : (
-              <div className="space-y-2">
-                {filteredItems.map((s, index) => (
-                  <div
-                    key={s.id}
-                    ref={(el) => (itemRefs.current[index] = el)}
-                    onClick={() => navigate(`/subject/${s.id}`)}
-                    className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
-                      index === focusedIndex
-                        ? "bg-indigo-600/30 ring-2 ring-indigo-500"
-                        : "hover:bg-gray-800/50"
-                    }`}
-                  >
-                    {s.images?.small && (
-                      <img src={s.images.small} alt="" className="w-12 h-16 rounded object-cover shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name_cn || s.name}</p>
-                      {s.name_cn && s.name && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{s.name}</p>
-                      )}
+              (() => {
+                // Group by weekday
+                const grouped = new Map<number, typeof filteredItems>();
+                for (const item of filteredItems) {
+                  const list = grouped.get(item.weekday) ?? [];
+                  list.push(item);
+                  grouped.set(item.weekday, list);
+                }
+                // Preserve weekday order (1-7)
+                const groups = [...grouped].sort(([a], [b]) => a - b);
+
+                let flatIdx = 0;
+                return groups.map(([weekday, items]) => (
+                  <div key={weekday} className="mb-4">
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">
+                      {WEEKDAY_CN[weekday]}
+                      <span className="text-xs text-gray-600 ml-2">共 {items.length} 部</span>
+                    </h3>
+                    <div className="space-y-1">
+                      {items.map((s) => {
+                        const idx = flatIdx++;
+                        return (
+                          <div
+                            key={s.id}
+                            ref={(el) => (itemRefs.current[idx] = el)}
+                            onClick={() => navigate(`/subject/${s.id}`)}
+                            className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
+                              idx === focusedIndex
+                                ? "bg-indigo-600/30 ring-2 ring-indigo-500"
+                                : "hover:bg-gray-800/50"
+                            }`}
+                          >
+                            {s.images?.small && (
+                              <img src={s.images.small} alt="" className="w-10 h-14 rounded object-cover shrink-0" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{s.name_cn || s.name}</p>
+                              {s.name_cn && s.name && (
+                                <p className="text-xs text-gray-500 truncate mt-0.5">{s.name}</p>
+                              )}
+                            </div>
+                            {s.rating?.score && (
+                              <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
+                            )}
+                            {s.rank && (
+                              <span className="text-xs text-gray-500 shrink-0">#{s.rank}</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                    <span className="text-xs text-gray-500 shrink-0">
-                      {WEEKDAY_CN[s.weekday]}
-                    </span>
-                    {s.rating?.score && (
-                      <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
-                    )}
-                    {s.rank && (
-                      <span className="text-xs text-gray-500 shrink-0">#{s.rank}</span>
-                    )}
                   </div>
-                ))}
-              </div>
+                ));
+              })()
             )}
           </>
         ) : (
