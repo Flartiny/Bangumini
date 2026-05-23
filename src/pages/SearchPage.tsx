@@ -8,8 +8,7 @@ export default function SearchPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState("2");
-  const initialQ = searchParams.get("q") ?? "";
-  const [keyword, setKeyword] = useState(initialQ);
+  const keyword = searchParams.get("q") ?? "";
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", keyword, typeFilter],
@@ -26,18 +25,11 @@ export default function SearchPage() {
 
   return (
     <div className="p-4">
-      <div className="flex gap-2 mb-4">
-        <input
-          autoFocus
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="搜索条目（支持拼音）…"
-          className="flex-1 px-3 py-2 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500"
-        />
+      <div className="flex items-center gap-2 mb-4">
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
-          className="px-3 py-2 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200"
+          className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
         >
           <option value="">全部</option>
           <option value="2">动画</option>
@@ -46,6 +38,9 @@ export default function SearchPage() {
           <option value="4">游戏</option>
           <option value="6">三次元</option>
         </select>
+        <span className="text-xs text-gray-500 ml-auto">
+          在顶部搜索框输入关键词后按回车
+        </span>
       </div>
 
       {!keyword && <p className="text-gray-500 text-sm">输入关键词开始搜索</p>}

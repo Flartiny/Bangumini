@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 
 const TABS = [
   { path: "/", label: "搜索", key: "1" },
@@ -8,17 +8,28 @@ const TABS = [
   { path: "/settings", label: "设置", key: "4" },
 ];
 
+const COLLECTION_TYPES = [
+  { value: "3", label: "在看" },
+  { value: "1", label: "想看" },
+  { value: "2", label: "看过" },
+  { value: "4", label: "搁置" },
+  { value: "5", label: "抛弃" },
+];
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const isSearchPage = location.pathname === "/";
+  const isCollections = location.pathname === "/collections";
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT") return; // don't intercept typing
+      if (target.tagName === "INPUT" || target.tagName === "SELECT") return;
 
-      // Tab navigation
       if (e.key === "1" && e.metaKey) { e.preventDefault(); navigate("/"); }
       if (e.key === "2" && e.metaKey) { e.preventDefault(); navigate("/calendar"); }
       if (e.key === "3" && e.metaKey) { e.preventDefault(); navigate("/collections"); }
@@ -35,6 +46,65 @@ export default function Layout() {
 
   const currentTab = TABS.findIndex((t) => t.path === location.pathname);
 
+  const headerInput = (() => {
+    if (isSearchPage) {
+      const q = searchParams.get("q") ?? "";
+      return (
+        <div className="ml-auto flex gap-2">
+          <input
+            ref={inputRef}
+            defaultValue={q}
+            placeholder="搜索条目（支持拼音）…"
+            className="w-64 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                setSearchParams({ q: e.currentTarget.value.trim() });
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (isCollections) {
+      const filter = searchParams.get("filter") ?? "";
+      const type = searchParams.get("type") ?? "3";
+      return (
+        <div className="ml-auto flex gap-2">
+          <input
+            ref={inputRef}
+            defaultValue={filter}
+            placeholder="筛选条目（支持拼音）…"
+            className="w-48 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
+            onChange={(e) => {
+              const v = e.target.value;
+              const params = new URLSearchParams(searchParams);
+              if (v) params.set("filter", v);
+              else params.delete("filter");
+              setSearchParams(params, { replace: true });
+            }}
+          />
+          <select
+            value={type}
+            onChange={(e) => {
+              const params = new URLSearchParams(searchParams);
+              params.set("type", e.target.value);
+              params.delete("filter");
+              setSearchParams(params, { replace: true });
+            }}
+            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+          >
+            {COLLECTION_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    return null;
+  })();
+
   return (
     <div className="h-screen flex flex-col bg-[#1a1a2e] text-gray-200">
       <header className="flex items-center gap-1 px-4 py-2 border-b border-gray-800 shrink-0">
@@ -50,16 +120,7 @@ export default function Layout() {
             </button>
           ))}
         </div>
-        <input
-          ref={inputRef}
-          placeholder="输入关键字搜索（可输入拼音）…"
-          className="ml-auto w-64 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && e.currentTarget.value) {
-              navigate(`/?q=${encodeURIComponent(e.currentTarget.value)}`);
-            }
-          }}
-        />
+        {headerInput}
       </header>
       <main className="flex-1 overflow-auto">
         <Outlet />
