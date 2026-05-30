@@ -1,14 +1,21 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  SearchIcon,
+  CalendarIcon,
+  BookmarkIcon,
+  SettingsIcon,
+  SidebarIcon,
+} from "./icons";
 
 const TABS = [
-  { path: "/", label: "搜索", key: "1" },
-  { path: "/calendar", label: "日历", key: "2" },
-  { path: "/collections", label: "收藏", key: "3" },
-  { path: "/settings", label: "设置", key: "4" },
-];
+  { path: "/", label: "搜索", key: "1", Icon: SearchIcon },
+  { path: "/calendar", label: "日历", key: "2", Icon: CalendarIcon },
+  { path: "/collections", label: "收藏", key: "3", Icon: BookmarkIcon },
+  { path: "/settings", label: "设置", key: "4", Icon: SettingsIcon },
+] as const;
 
 const COLLECTION_TYPES = [
   { value: "3", label: "在看" },
@@ -38,30 +45,54 @@ const CALENDAR_WEEKDAYS = [
   { value: "7", label: "周日" },
 ];
 
+const SIDEBAR_KEY = "bangumini_sidebar_collapsed";
+
+const selectClass =
+  "appearance-none bg-elevated border border-line rounded-md pl-2.5 pr-7 py-1.5 text-[13px] text-fg-secondary hover:text-fg focus:border-accent focus:outline-none bg-[length:12px] bg-no-repeat bg-[right_0.5rem_center]";
+// Down-chevron rendered as an inline SVG data URI so native <select> matches the theme.
+const selectArrow =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
+
+function KeyHint({ k, label }: { k: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-fg-tertiary">
+      <kbd className="inline-flex min-w-5 h-5 items-center justify-center px-1 rounded bg-elevated border border-line text-[11px] font-medium text-fg-secondary">
+        {k}
+      </kbd>
+      <span className="text-[12px]">{label}</span>
+    </span>
+  );
+}
+
 export default function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const inputRef = useRef<HTMLInputElement>(null);
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_KEY) === "1",
+  );
 
   const isSearchPage = location.pathname === "/";
   const isCollections = location.pathname === "/collections";
   const isCalendar = location.pathname === "/calendar";
+  const currentTab = TABS.findIndex((t) => t.path === location.pathname);
+  const currentTabRef = useRef(currentTab);
+  currentTabRef.current = currentTab;
+
+  useEffect(() => {
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
 
   const handleHeaderMouseDown = async (e: React.MouseEvent) => {
-    // Only drag on left button and not on interactive elements
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'SELECT') {
-      return;
-    }
-
+    if (["BUTTON", "INPUT", "SELECT", "A"].includes(target.tagName)) return;
     e.preventDefault();
     try {
       await invoke("set_dragging", { dragging: true });
       await getCurrentWindow().startDragging();
     } finally {
-      // startDragging() blocks until drag ends
       await invoke("set_dragging", { dragging: false });
     }
   };
@@ -69,13 +100,36 @@ export default function Layout() {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       const target = e.target as HTMLElement;
-      if (target.tagName === "INPUT" || target.tagName === "SELECT") return;
+      const isInput = target.tagName === "INPUT" || target.tagName === "SELECT";
 
-      if (e.key === "1" && e.metaKey) { e.preventDefault(); navigate("/"); }
-      if (e.key === "2" && e.metaKey) { e.preventDefault(); navigate("/calendar"); }
-      if (e.key === "3" && e.metaKey) { e.preventDefault(); navigate("/collections"); }
+      // Tab toggles the sidebar (unless typing in a field)
+      if (e.key === "Tab" && !isInput && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setCollapsed((v) => !v);
+        return;
+      }
 
-      // Focus search
+      // Ctrl/Cmd + Up/Down cycles through sidebar tabs
+      if ((e.metaKey || e.ctrlKey) && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        e.preventDefault();
+        const dir = e.key === "ArrowDown" ? 1 : -1;
+        const from = currentTabRef.current < 0 ? 0 : currentTabRef.current;
+        const next = (from + dir + TABS.length) % TABS.length;
+        navigate({ pathname: TABS[next].path, search: "" });
+        return;
+      }
+
+      if (isInput) return;
+
+      if (e.metaKey || e.ctrlKey) {
+        const tab = TABS.find((t) => t.key === e.key);
+        if (tab) {
+          e.preventDefault();
+          navigate({ pathname: tab.path, search: "" });
+          return;
+        }
+      }
+
       if (e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey))) {
         e.preventDefault();
         inputRef.current?.focus();
@@ -85,29 +139,33 @@ export default function Layout() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [navigate]);
 
-  const currentTab = TABS.findIndex((t) => t.path === location.pathname);
-
-  const headerInput = (() => {
+  const filterBar = (() => {
     if (isSearchPage) {
       const q = searchParams.get("q") ?? "";
       const stype = searchParams.get("stype") ?? "2";
       return (
-        <div className="ml-auto flex gap-2">
-          <input
-            ref={inputRef}
-            key={location.pathname}
-            defaultValue={q}
-            placeholder="搜索条目…"
-            className="w-48 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.currentTarget.value.trim()) {
-                const params = new URLSearchParams();
-                params.set("q", e.currentTarget.value.trim());
-                if (stype) params.set("stype", stype);
-                setSearchParams(params);
-              }
-            }}
-          />
+        <>
+          <div className="relative flex-1 max-w-md">
+            <SearchIcon
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-tertiary pointer-events-none"
+            />
+            <input
+              ref={inputRef}
+              key={location.pathname}
+              defaultValue={q}
+              placeholder="搜索条目…"
+              className="w-full pl-9 pr-3 py-1.5 text-[13px] bg-elevated rounded-md border border-line text-fg placeholder-fg-tertiary focus:border-accent focus:outline-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                  const params = new URLSearchParams();
+                  params.set("q", e.currentTarget.value.trim());
+                  if (stype) params.set("stype", stype);
+                  setSearchParams(params);
+                }
+              }}
+            />
+          </div>
           <select
             value={stype}
             onChange={(e) => {
@@ -116,13 +174,14 @@ export default function Layout() {
               else params.delete("stype");
               setSearchParams(params, { replace: true });
             }}
-            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+            className={selectClass}
+            style={{ backgroundImage: selectArrow }}
           >
             {SUBJECT_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
-        </div>
+        </>
       );
     }
 
@@ -130,21 +189,27 @@ export default function Layout() {
       const filter = searchParams.get("filter") ?? "";
       const weekday = searchParams.get("weekday") ?? "";
       return (
-        <div className="ml-auto flex gap-2">
-          <input
-            ref={inputRef}
-            key={location.pathname}
-            defaultValue={filter}
-            placeholder="筛选日历…"
-            className="w-44 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
-            onChange={(e) => {
-              const v = e.target.value;
-              const params = new URLSearchParams(searchParams);
-              if (v) params.set("filter", v);
-              else params.delete("filter");
-              setSearchParams(params, { replace: true });
-            }}
-          />
+        <>
+          <div className="relative flex-1 max-w-md">
+            <SearchIcon
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-tertiary pointer-events-none"
+            />
+            <input
+              ref={inputRef}
+              key={location.pathname}
+              defaultValue={filter}
+              placeholder="筛选日历…"
+              className="w-full pl-9 pr-3 py-1.5 text-[13px] bg-elevated rounded-md border border-line text-fg placeholder-fg-tertiary focus:border-accent focus:outline-none"
+              onChange={(e) => {
+                const v = e.target.value;
+                const params = new URLSearchParams(searchParams);
+                if (v) params.set("filter", v);
+                else params.delete("filter");
+                setSearchParams(params, { replace: true });
+              }}
+            />
+          </div>
           <select
             value={weekday}
             onChange={(e) => {
@@ -154,13 +219,14 @@ export default function Layout() {
               params.delete("filter");
               setSearchParams(params, { replace: true });
             }}
-            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+            className={selectClass}
+            style={{ backgroundImage: selectArrow }}
           >
             {CALENDAR_WEEKDAYS.map((d) => (
               <option key={d.value} value={d.value}>{d.label}</option>
             ))}
           </select>
-        </div>
+        </>
       );
     }
 
@@ -168,21 +234,27 @@ export default function Layout() {
       const filter = searchParams.get("filter") ?? "";
       const type = searchParams.get("type") ?? "3";
       return (
-        <div className="ml-auto flex gap-2">
-          <input
-            ref={inputRef}
-            key={location.pathname}
-            defaultValue={filter}
-            placeholder="筛选收藏…"
-            className="w-44 px-3 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 placeholder-gray-500 focus:border-indigo-500 focus:outline-none"
-            onChange={(e) => {
-              const v = e.target.value;
-              const params = new URLSearchParams(searchParams);
-              if (v) params.set("filter", v);
-              else params.delete("filter");
-              setSearchParams(params, { replace: true });
-            }}
-          />
+        <>
+          <div className="relative flex-1 max-w-md">
+            <SearchIcon
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-tertiary pointer-events-none"
+            />
+            <input
+              ref={inputRef}
+              key={location.pathname}
+              defaultValue={filter}
+              placeholder="筛选收藏…"
+              className="w-full pl-9 pr-3 py-1.5 text-[13px] bg-elevated rounded-md border border-line text-fg placeholder-fg-tertiary focus:border-accent focus:outline-none"
+              onChange={(e) => {
+                const v = e.target.value;
+                const params = new URLSearchParams(searchParams);
+                if (v) params.set("filter", v);
+                else params.delete("filter");
+                setSearchParams(params, { replace: true });
+              }}
+            />
+          </div>
           <select
             value={type}
             onChange={(e) => {
@@ -191,43 +263,108 @@ export default function Layout() {
               params.delete("filter");
               setSearchParams(params, { replace: true });
             }}
-            className="px-2 py-1 text-sm bg-gray-800 rounded-md border border-gray-700 text-gray-200 focus:border-indigo-500 focus:outline-none"
+            className={selectClass}
+            style={{ backgroundImage: selectArrow }}
           >
             {COLLECTION_TYPES.map((t) => (
               <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
-        </div>
+        </>
       );
     }
 
-    return null;
+    return <h1 className="text-[13px] font-medium text-fg-secondary">设置</h1>;
   })();
 
   return (
-    <div className="h-screen flex flex-col bg-[#1a1a2e] text-gray-200">
-      <header
-        className="flex items-center gap-1 px-4 py-2 border-b border-gray-800 shrink-0"
-        onMouseDown={handleHeaderMouseDown}
-        onDoubleClick={(e) => e.preventDefault()}
+    <div className="h-screen flex text-fg overflow-hidden">
+      {/* Sidebar */}
+      <aside
+        className={`shrink-0 flex flex-col bg-panel border-r border-line transition-[width] duration-200 ease-out ${
+          collapsed ? "w-[60px]" : "w-[196px]"
+        }`}
       >
-        <span className="text-indigo-400 font-bold mr-3 text-sm">Bangumini</span>
-        <div className="flex gap-0.5 bg-gray-800/50 rounded-lg p-0.5">
-          {TABS.map((tab, i) => (
-            <button
-              key={tab.path}
-              onClick={() => navigate({ pathname: tab.path, search: "" })}
-              className={`px-3 py-1 text-xs rounded-md transition-colors ${i === currentTab ? "bg-indigo-600 text-white" : "text-gray-400 hover:text-gray-200"}`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        <div
+          className="flex items-center gap-2.5 h-12 px-3.5 shrink-0"
+          data-tauri-drag-region
+          onMouseDown={handleHeaderMouseDown}
+        >
+          <div className="w-7 h-7 shrink-0 rounded-lg bg-accent/90 flex items-center justify-center text-accent-fg text-[13px] font-bold">
+            B
+          </div>
+          {!collapsed && (
+            <span className="font-semibold text-[14px] tracking-tight truncate">
+              Bangumini
+            </span>
+          )}
         </div>
-        {headerInput}
-      </header>
-      <main className="flex-1 overflow-auto">
-        <Outlet />
-      </main>
+
+        <nav className="flex-1 px-2.5 py-2 space-y-0.5">
+          {TABS.map((tab, i) => {
+            const active = i === currentTab;
+            return (
+              <button
+                key={tab.path}
+                onClick={() => navigate({ pathname: tab.path, search: "" })}
+                title={collapsed ? tab.label : undefined}
+                className={`group relative w-full flex items-center gap-3 px-2.5 py-2 rounded-md text-[13px] transition-colors ${
+                  active
+                    ? "bg-selected text-fg"
+                    : "text-fg-secondary hover:bg-hover hover:text-fg"
+                }`}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-accent" />
+                )}
+                <tab.Icon size={18} className="shrink-0" />
+                {!collapsed && <span className="truncate">{tab.label}</span>}
+                {!collapsed && (
+                  <kbd className="ml-auto text-[11px] text-fg-tertiary opacity-0 group-hover:opacity-100 transition-opacity">
+                    ⌘{tab.key}
+                  </kbd>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        <button
+          onClick={() => setCollapsed((v) => !v)}
+          title="折叠侧边栏 (Tab)"
+          className="m-2.5 flex items-center gap-3 px-2.5 py-2 rounded-md text-fg-tertiary hover:bg-hover hover:text-fg-secondary transition-colors"
+        >
+          <SidebarIcon size={18} className="shrink-0" />
+          {!collapsed && <span className="text-[13px]">折叠</span>}
+        </button>
+      </aside>
+
+      {/* Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header
+          className="flex items-center gap-2 h-12 px-4 border-b border-line shrink-0"
+          data-tauri-drag-region
+          onMouseDown={handleHeaderMouseDown}
+          onDoubleClick={(e) => e.preventDefault()}
+        >
+          {filterBar}
+        </header>
+
+        <main className="flex-1 overflow-auto">
+          <Outlet />
+        </main>
+
+        <footer className="flex items-center gap-4 h-9 px-4 border-t border-line shrink-0 bg-panel/40">
+          <KeyHint k="↵" label="打开" />
+          <KeyHint k="↑↓" label="选择" />
+          <KeyHint k="⌃↑↓" label="切换页" />
+          <KeyHint k="Tab" label="侧边栏" />
+          <div className="ml-auto flex items-center gap-1.5 text-fg-tertiary text-[12px]">
+            <SearchIcon size={13} />
+            <span>{"⌘K 搜索"}</span>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

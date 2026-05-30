@@ -5,6 +5,7 @@ import { getCalendar } from "@shared/api/client";
 import { WEEKDAY_CN, getTodayBangumiWeekday } from "@shared/sort-collections";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import type { SubjectSmall } from "@shared/api/types";
+import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
 
 export default function CalendarPage() {
   const navigate = useNavigate();
@@ -85,6 +86,9 @@ export default function CalendarPage() {
       const isInput = tag === "INPUT" || tag === "SELECT";
       const itemCount = displayItems.length;
 
+      // Ctrl/Cmd + arrows are reserved for sidebar tab switching (handled in Layout)
+      if (e.ctrlKey || e.metaKey) return;
+
       if (e.key === "ArrowLeft") {
         if (isInput) return;
         e.preventDefault();
@@ -116,25 +120,25 @@ export default function CalendarPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [today, currentDay, focusedIndex, navigate, displayItems.length, isFiltering]);
 
-  if (isLoading) return <p className="p-4 text-gray-500 text-sm">加载中…</p>;
-  if (error) return <p className="p-4 text-red-400 text-sm">加载出错: {String(error)}</p>;
-  if (!calendar || calendar.length === 0) return <p className="p-4 text-gray-500 text-sm">暂无放送数据</p>;
+  if (isLoading) return <p className="p-4 text-fg-tertiary text-[13px]">加载中…</p>;
+  if (error) return <p className="p-4 text-danger text-[13px]">加载出错: {String(error)}</p>;
+  if (!calendar || calendar.length === 0) return <p className="p-4 text-fg-tertiary text-[13px]">暂无放送数据</p>;
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-2.5">
         {isFiltering ? (
           <>
             {/* Filtering mode: flat list across all days */}
-            <div className="mb-3">
-              <h2 className="text-sm text-gray-400">
+            <div className="mb-2 px-1">
+              <h2 className="text-[12px] text-fg-secondary">
                 筛选{filterText ? `"${filterText}"` : ""}{" "}
                 {filterWeekday && `· ${WEEKDAY_CN[parseInt(filterWeekday)]}`}{" "}
                 · 共 {filteredItems.length} 条
               </h2>
             </div>
             {filteredItems.length === 0 ? (
-              <p className="text-sm text-gray-500">无匹配条目</p>
+              <p className="text-[13px] text-fg-tertiary px-1">无匹配条目</p>
             ) : (
               (() => {
                 // Group by weekday
@@ -149,41 +153,30 @@ export default function CalendarPage() {
 
                 let flatIdx = 0;
                 return groups.map(([weekday, items]) => (
-                  <div key={weekday} className="mb-4">
-                    <h3 className="text-sm font-medium text-gray-400 mb-2">
+                  <div key={weekday} className="mb-3">
+                    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-1 px-2.5">
                       {WEEKDAY_CN[weekday]}
-                      <span className="text-xs text-gray-600 ml-2">共 {items.length} 部</span>
+                      <span className="ml-2 normal-case font-normal">共 {items.length} 部</span>
                     </h3>
-                    <div className="space-y-1">
+                    <div className="space-y-0.5">
                       {items.map((s) => {
                         const idx = flatIdx++;
                         return (
-                          <div
+                          <SubjectRow
                             key={s.id}
-                            ref={(el) => (itemRefs.current[idx] = el)}
+                            ref={(el) => { itemRefs.current[idx] = el; }}
+                            coverUrl={s.images?.small}
+                            title={s.name_cn || s.name}
+                            subtitle={s.name_cn && s.name ? s.name : undefined}
+                            selected={idx === focusedIndex}
                             onClick={() => navigate(`/subject/${s.id}`)}
-                            className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
-                              idx === focusedIndex
-                                ? "bg-indigo-600/30 ring-2 ring-indigo-500"
-                                : "hover:bg-gray-800/50"
-                            }`}
-                          >
-                            {s.images?.small && (
-                              <img src={s.images.small} alt="" className="w-10 h-14 rounded object-cover shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{s.name_cn || s.name}</p>
-                              {s.name_cn && s.name && (
-                                <p className="text-xs text-gray-500 truncate mt-0.5">{s.name}</p>
-                              )}
-                            </div>
-                            {s.rating?.score && (
-                              <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
-                            )}
-                            {s.rank && (
-                              <span className="text-xs text-gray-500 shrink-0">#{s.rank}</span>
-                            )}
-                          </div>
+                            accessories={
+                              <>
+                                {s.rating?.score ? <Rating score={s.rating.score} /> : null}
+                                {s.rank ? <Meta>#{s.rank}</Meta> : null}
+                              </>
+                            }
+                          />
                         );
                       })}
                     </div>
@@ -195,66 +188,55 @@ export default function CalendarPage() {
         ) : (
           <>
             {/* Normal mode: one day at a time */}
-            <div className="flex items-center justify-between mb-3">
-              <h2 className={`text-lg font-medium ${isToday ? "text-indigo-400" : "text-gray-300"}`}>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h2 className={`text-[15px] font-semibold ${isToday ? "text-accent" : "text-fg"}`}>
                 {WEEKDAY_CN[currentDay]}
                 {isToday && " · 今天"}
                 {currentDayData?.weekday.ja && (
-                  <span className="text-xs text-gray-500 ml-2">{currentDayData.weekday.ja}</span>
+                  <span className="text-[12px] font-normal text-fg-tertiary ml-2">{currentDayData.weekday.ja}</span>
                 )}
               </h2>
-              {!isToday && (
-                <button
-                  onClick={() => setCurrentDay(today)}
-                  className="px-2 py-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-                >
-                  回到今天
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                <span className="text-[12px] text-fg-tertiary">← → 切换日期</span>
+                {!isToday && (
+                  <button
+                    onClick={() => setCurrentDay(today)}
+                    className="px-2 py-1 text-[12px] text-accent hover:opacity-80 transition-opacity"
+                  >
+                    回到今天
+                  </button>
+                )}
+              </div>
             </div>
 
             {!currentDayData || currentDayData.items.length === 0 ? (
-              <p className="text-sm text-gray-500">
+              <p className="text-[13px] text-fg-tertiary px-1">
                 {isToday ? "今天暂无放送" : "暂无放送"}
               </p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-0.5">
                 {currentDayData.items.map((s, index) => (
-                  <div
+                  <SubjectRow
                     key={s.id}
-                    ref={(el) => (itemRefs.current[index] = el)}
+                    ref={(el) => { itemRefs.current[index] = el; }}
+                    size="md"
+                    coverUrl={s.images?.small}
+                    title={s.name_cn || s.name}
+                    subtitle={s.name_cn && s.name ? s.name : undefined}
+                    selected={index === focusedIndex}
                     onClick={() => navigate(`/subject/${s.id}`)}
-                    className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
-                      index === focusedIndex
-                        ? "bg-indigo-600/30 ring-2 ring-indigo-500"
-                        : "hover:bg-gray-800/50"
-                    }`}
-                  >
-                    {s.images?.small && (
-                      <img src={s.images.small} alt="" className="w-12 h-16 rounded object-cover shrink-0" />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{s.name_cn || s.name}</p>
-                      {s.name_cn && s.name && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">{s.name}</p>
-                      )}
-                    </div>
-                    {s.rating?.score && (
-                      <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
-                    )}
-                    {s.rank && (
-                      <span className="text-xs text-gray-500 shrink-0">#{s.rank}</span>
-                    )}
-                  </div>
+                    accessories={
+                      <>
+                        {s.rating?.score ? <Rating score={s.rating.score} /> : null}
+                        {s.rank ? <Meta>#{s.rank}</Meta> : null}
+                      </>
+                    }
+                  />
                 ))}
               </div>
             )}
           </>
         )}
-      </div>
-
-      <div className="px-4 py-2 border-t border-gray-700 text-xs text-gray-500">
-        提示: ← → 切换日期 | ↑ ↓ 选择条目 | Enter 查看详情 | Home 回到今天
       </div>
     </div>
   );

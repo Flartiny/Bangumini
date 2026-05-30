@@ -120,24 +120,24 @@ export default function ShortcutRecorder({ className }: Props) {
             setError(null);
             setDraft(null);
           }}
-          className={`flex-1 px-3 py-2 text-sm rounded-md border text-left font-mono ${
+          className={`flex-1 px-3 py-2 text-[13px] rounded-md border text-left font-mono transition-colors ${
             recording
-              ? "border-indigo-500 bg-indigo-500/10 text-indigo-200"
-              : "border-gray-700 bg-gray-800 text-gray-200 hover:border-gray-600"
+              ? "border-accent bg-accent-soft text-accent"
+              : "border-line bg-elevated text-fg hover:border-line-strong"
           }`}
         >
           {display}
         </button>
         <button
           onClick={reset}
-          className="px-3 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-md text-gray-300 border border-gray-700"
+          className="px-3 py-2 text-[13px] bg-elevated hover:bg-hover rounded-md text-fg-secondary border border-line transition-colors"
         >
           恢复默认
         </button>
       </div>
-      {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      {error && <p className="text-[12px] text-danger mt-1.5">{error}</p>}
       {!error && (
-        <p className="text-xs text-gray-600 mt-1">
+        <p className="text-[12px] text-fg-tertiary mt-1.5">
           点击后按下组合键录制；至少包含一个修饰键（Ctrl / Alt / Shift / Cmd）
         </p>
       )}

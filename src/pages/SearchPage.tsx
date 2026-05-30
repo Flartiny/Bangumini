@@ -2,6 +2,17 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { searchSubjects } from "@shared/api/client";
 import { SubjectTypeLabel } from "@shared/api/types";
+import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
+import { SearchIcon } from "../components/icons";
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-3 text-fg-tertiary">
+      <SearchIcon size={32} className="opacity-40" />
+      <p className="text-[13px]">{children}</p>
+    </div>
+  );
+}
 
 export default function SearchPage() {
   const [searchParams] = useSearchParams();
@@ -22,40 +33,29 @@ export default function SearchPage() {
 
   const subjects = data?.data ?? [];
 
-  if (!keyword) {
-    return <p className="p-4 text-gray-500 text-sm">输入关键词开始搜索</p>;
-  }
-
-  if (error) return <p className="p-4 text-red-400 text-sm">搜索出错: {String(error)}</p>;
-  if (isLoading) return <p className="p-4 text-gray-500 text-sm">搜索中…</p>;
+  if (!keyword) return <EmptyState>输入关键词开始搜索</EmptyState>;
+  if (error) return <EmptyState>搜索出错: {String(error)}</EmptyState>;
+  if (isLoading) return <EmptyState>搜索中…</EmptyState>;
+  if (subjects.length === 0) return <EmptyState>无结果</EmptyState>;
 
   return (
-    <div className="p-4">
-      {subjects.length === 0 ? (
-        <p className="text-gray-500 text-sm">无结果</p>
-      ) : (
-        <div className="space-y-1">
-          {subjects.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => navigate(`/subject/${s.id}`)}
-              className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-800/50 cursor-pointer transition-colors"
-            >
-              {s.images?.small && (
-                <img src={s.images.small} alt="" className="w-10 h-14 rounded object-cover shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium truncate">{s.name_cn || s.name}</div>
-                {s.name_cn && <div className="text-xs text-gray-500 truncate">{s.name}</div>}
-              </div>
-              <span className="text-xs text-gray-500 shrink-0">{SubjectTypeLabel[s.type]}</span>
-              {s.rating?.score && (
-                <span className="text-xs text-yellow-500 shrink-0">★ {s.rating.score.toFixed(1)}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="p-2.5 space-y-0.5">
+      {subjects.map((s) => (
+        <SubjectRow
+          key={s.id}
+          coverUrl={s.images?.small}
+          title={s.name_cn || s.name}
+          subtitle={s.name_cn ? s.name : undefined}
+          onClick={() => navigate(`/subject/${s.id}`)}
+          accessories={
+            <>
+              <Meta>{SubjectTypeLabel[s.type]}</Meta>
+              {s.rating?.score ? <Rating score={s.rating.score} /> : null}
+            </>
+          }
+        />
+      ))}
     </div>
   );
 }
+

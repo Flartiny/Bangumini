@@ -34,8 +34,8 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#1a1a2e]">
-        <span className="text-gray-400">加载中...</span>
+      <div className="flex items-center justify-center h-screen">
+        <span className="text-fg-tertiary text-[13px]">加载中…</span>
       </div>
     );
   }

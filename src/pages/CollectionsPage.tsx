@@ -11,6 +11,7 @@ import {
 } from "@shared/sort-collections";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import { getUsername } from "../api/oauth";
+import { SubjectRow, Rating, Meta, Tag } from "../components/SubjectRow";
 
 const LIMIT = 20;
 
@@ -161,6 +162,9 @@ export default function CollectionsPage() {
       const isInput = tag === "INPUT" || tag === "SELECT";
       const itemCount = paged.length;
 
+      // Ctrl/Cmd + arrows are reserved for sidebar tab switching (handled in Layout)
+      if (e.ctrlKey || e.metaKey) return;
+
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setFocusedIndex((i) => Math.max(0, i - 1));
@@ -191,53 +195,42 @@ export default function CollectionsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Page indicator */}
-      <div className="px-4 py-1.5 text-xs text-gray-500 border-b border-gray-800 shrink-0">
+      <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0">
         {searchText
           ? `搜索 · 共 ${filtered.length} 条`
           : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条`}
       </div>
 
       {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {error && <p className="text-red-400 text-sm mb-2">收藏加载出错: {String(error)}</p>}
-        {calError && <p className="text-red-400 text-sm mb-2">日历加载出错: {String(calError)}</p>}
-        {isLoading && <p className="text-gray-500 text-sm">加载中…</p>}
-        {!uname && !isLoading && <p className="text-gray-500 text-sm">正在获取用户信息…</p>}
+      <div className="flex-1 overflow-y-auto p-2.5">
+        {error && <p className="text-danger text-[13px] mb-2 px-1">收藏加载出错: {String(error)}</p>}
+        {calError && <p className="text-danger text-[13px] mb-2 px-1">日历加载出错: {String(calError)}</p>}
+        {isLoading && <p className="text-fg-tertiary text-[13px] px-1">加载中…</p>}
+        {!uname && !isLoading && <p className="text-fg-tertiary text-[13px] px-1">正在获取用户信息…</p>}
 
-        <div className="space-y-1">
+        <div className="space-y-0.5">
           {paged.map((item, index) => {
             const s = item.subject;
             const label = isWatching ? displayLabelMap.get(item.subject_id) ?? null : null;
             const weekday = s.air_weekday ? WEEKDAY_CN[s.air_weekday] : undefined;
             return (
-              <div
+              <SubjectRow
                 key={s.id}
-                ref={(el) => (itemRefs.current[index] = el)}
+                ref={(el) => { itemRefs.current[index] = el; }}
+                coverUrl={s.images?.small}
+                title={s.name_cn || s.name}
+                subtitle={s.name_cn ? s.name : undefined}
+                selected={index === focusedIndex}
                 onClick={() => navigate(`/subject/${s.id}`, { state: { fromCollections: true } })}
-                className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
-                  index === focusedIndex
-                    ? "bg-indigo-600/30 ring-2 ring-indigo-500"
-                    : "hover:bg-gray-800/50"
-                }`}
-              >
-                {s.images?.small && (
-                  <img src={s.images.small} alt="" className="w-10 h-14 rounded object-cover shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm truncate">{s.name_cn || s.name}</div>
-                  {s.name_cn && <div className="text-xs text-gray-500 truncate">{s.name}</div>}
-                </div>
-                {label && (
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300 shrink-0">
-                    {label}
-                  </span>
-                )}
-                {item.rate > 0 && (
-                  <span className="text-xs text-yellow-500 shrink-0">★ {item.rate}</span>
-                )}
-                {weekday && <span className="text-xs text-gray-500 shrink-0">{weekday}</span>}
-                <span className="text-xs text-gray-600 shrink-0">{SubjectTypeLabel[s.type]}</span>
-              </div>
+                accessories={
+                  <>
+                    {label && <Tag>{label}</Tag>}
+                    {item.rate > 0 && <Rating score={item.rate} />}
+                    {weekday && <Meta>{weekday}</Meta>}
+                    <Meta>{SubjectTypeLabel[s.type]}</Meta>
+                  </>
+                }
+              />
             );
           })}
         </div>

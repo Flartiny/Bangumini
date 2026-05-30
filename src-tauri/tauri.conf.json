@@ -19,7 +19,13 @@
         "resizable": false,
         "maximizable": false,
         "decorations": false,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "transparent": true,
+        "shadow": true,
+        "windowEffects": {
+          "effects": ["acrylic"],
+          "state": "active"
+        }
       }
     ],
     "security": {

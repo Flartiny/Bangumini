@@ -13,6 +13,7 @@ import {
 import { CollectionTypeLabel } from "@shared/api/types";
 import type { CollectionType } from "@shared/api/types";
 import { getUsername } from "../api/oauth";
+import { ChevronLeftIcon, ExternalIcon } from "../components/icons";
 
 const COLLECTION_OPTIONS: { type: CollectionType; label: string; key: string }[] = [
   { type: 1, label: "想看", key: "1" },
@@ -205,89 +206,92 @@ export default function SubjectDetailPage() {
   });
 
   return (
-    <div className="h-screen flex flex-col bg-[#1a1a2e] text-gray-200">
+    <div className="h-screen flex flex-col text-fg bg-surface/90">
       {/* Header */}
-      <header className="flex items-center gap-2 px-4 py-2 border-b border-gray-800 shrink-0">
-        <button onClick={handleBack} className="text-gray-400 hover:text-white text-sm">
-          ← 返回
+      <header className="flex items-center gap-2 h-12 px-3 border-b border-line shrink-0">
+        <button
+          onClick={handleBack}
+          className="flex items-center gap-1 pl-1.5 pr-2.5 py-1 rounded-md text-fg-secondary hover:bg-hover hover:text-fg transition-colors text-[13px]"
+        >
+          <ChevronLeftIcon size={16} />
+          返回
         </button>
-        <span className="text-sm font-medium truncate">{subject?.name_cn || subject?.name || "条目详情"}</span>
-        <span className="text-xs text-gray-500 ml-2">
-          Ctrl+K 操作 | ← → 调进度 | Enter 确认 | Backspace 返回
+        <span className="text-[13px] font-medium truncate">
+          {subject?.name_cn || subject?.name || "条目详情"}
         </span>
+        {loading && <span className="text-[12px] text-fg-tertiary animate-pulse">保存中…</span>}
         <button
           onClick={() => window.open(`https://bgm.tv/subject/${subjectId}`)}
-          className="ml-auto text-xs text-indigo-400 hover:underline"
+          className="ml-auto flex items-center gap-1 px-2 py-1 rounded-md text-[12px] text-fg-secondary hover:bg-hover hover:text-fg transition-colors"
         >
-          Bangumi ↗
+          Bangumi
+          <ExternalIcon size={13} />
         </button>
       </header>
 
       {/* Two-column body */}
       <div className="flex-1 flex overflow-hidden">
         {/* Left column: scrollable content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
           {subject?.summary && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-400 mb-2">简介</h3>
-              <p className="text-sm text-gray-500 leading-relaxed">{subject.summary}</p>
-            </div>
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">简介</h3>
+              <p className="text-[13px] text-fg-secondary leading-relaxed whitespace-pre-line">{subject.summary}</p>
+            </section>
           )}
 
           {staffMap.size > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-400 mb-2">Staff</h3>
-              <div className="space-y-1">
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">Staff</h3>
+              <div className="space-y-1.5">
                 {[...staffMap].map(([role, names]) => (
-                  <div key={role} className="text-sm leading-relaxed">
-                    <span className="text-gray-500">{role}: </span>
-                    <span>{names.join(" / ")}</span>
+                  <div key={role} className="text-[13px] leading-relaxed">
+                    <span className="text-fg-tertiary">{role}: </span>
+                    <span className="text-fg-secondary">{names.join(" / ")}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           {(characters ?? []).length > 0 && (
-            <div>
-              <h3 className="text-sm font-medium text-gray-400 mb-2">角色 / Cast</h3>
-              <div className="space-y-1">
+            <section>
+              <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">角色 / Cast</h3>
+              <div className="space-y-1.5">
                 {(characters ?? []).map((ch) => (
-                  <div key={ch.id} className="text-sm leading-relaxed">
-                    <span>{ch.name}</span>
+                  <div key={ch.id} className="text-[13px] leading-relaxed">
+                    <span className="text-fg">{ch.name}</span>
                     {ch.actors.length > 0 && (
-                      <span className="text-gray-500"> CV: {ch.actors.map((a) => a.name).join(" / ")}</span>
+                      <span className="text-fg-tertiary"> CV: {ch.actors.map((a) => a.name).join(" / ")}</span>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
         </div>
 
         {/* Right column: fixed info panel */}
-        <div className="w-72 shrink-0 border-l border-gray-800 p-5 flex flex-col gap-4 overflow-y-auto">
+        <div className="w-72 shrink-0 border-l border-line p-5 flex flex-col gap-4 overflow-y-auto bg-panel/40">
           {subject?.images?.large && (
-            <img src={subject.images.large} alt="" className="w-full rounded-lg" />
+            <img src={subject.images.large} alt="" className="w-full rounded-card border border-line" />
           )}
 
-          <div className="space-y-2 text-sm">
-            <div>
-              <span className="text-gray-500">评分 </span>
-              <span className="text-yellow-400 text-lg font-medium">
-                {subject?.rating?.score?.toFixed(1) ?? "暂无"}
+          <div className="space-y-3 text-[13px]">
+            <div className="flex items-baseline gap-2">
+              <span className="text-fg-tertiary">评分</span>
+              <span className="text-star text-2xl font-semibold tabular-nums">
+                {subject?.rating?.score?.toFixed(1) ?? "—"}
               </span>
-              {subject?.rank ? (
-                <span className="text-gray-500 ml-2">排名 #{subject.rank}</span>
-              ) : null}
+              {subject?.rank ? <span className="text-fg-tertiary">#{subject.rank}</span> : null}
             </div>
 
             {subject?.date && (
               <div>
-                <span className="text-gray-500">放送 </span>
-                <span>{subject.date}</span>
+                <span className="text-fg-tertiary">放送 </span>
+                <span className="text-fg-secondary">{subject.date}</span>
                 {subject.air_weekday ? (
-                  <span className="text-gray-500 ml-1">
+                  <span className="text-fg-tertiary ml-1">
                     ({["", "周一", "周二", "周三", "周四", "周五", "周六", "周日"][subject.air_weekday]})
                   </span>
                 ) : null}
@@ -295,29 +299,31 @@ export default function SubjectDetailPage() {
             )}
 
             <div>
-              <span className="text-gray-500">状态 </span>
+              <span className="text-fg-tertiary">状态 </span>
               {collection ? (
-                <span className="text-indigo-400">{CollectionTypeLabel[collection.type]}</span>
+                <span className="text-accent font-medium">{CollectionTypeLabel[collection.type]}</span>
               ) : (
-                <span className="text-gray-600">未收藏</span>
+                <span className="text-fg-tertiary">未收藏</span>
               )}
             </div>
 
             {totalEp > 0 && (
-              <div>
-                <span className="text-gray-500">进度 </span>
-                {isDirty ? (
-                  <span className="text-green-400">
-                    {currentEp} → {displayTarget} / {totalEp}
-                  </span>
-                ) : (
-                  <span>
-                    {currentEp} / {totalEp}
-                  </span>
-                )}
-                {isDirty && (
-                  <span className="text-xs text-gray-500 ml-1">按 Enter 提交</span>
-                )}
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-fg-tertiary">进度</span>
+                  {isDirty ? (
+                    <span className="text-success tabular-nums">{currentEp} → {displayTarget} / {totalEp}</span>
+                  ) : (
+                    <span className="text-fg-secondary tabular-nums">{currentEp} / {totalEp}</span>
+                  )}
+                </div>
+                <div className="h-1.5 rounded-full bg-elevated overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${isDirty ? "bg-success" : "bg-accent"}`}
+                    style={{ width: `${Math.min(100, (displayTarget / totalEp) * 100)}%` }}
+                  />
+                </div>
+                {isDirty && <p className="text-[12px] text-fg-tertiary mt-1.5">按 Enter 提交 · ← → 调整</p>}
               </div>
             )}
           </div>
@@ -327,31 +333,33 @@ export default function SubjectDetailPage() {
       {/* Command Palette Overlay */}
       {paletteOpen && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setPaletteOpen(false)} />
-          <div className="relative w-80 bg-gray-800 border border-gray-600 rounded-lg shadow-2xl overflow-hidden">
-            <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-700">
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setPaletteOpen(false)} />
+          <div className="relative w-80 bg-elevated border border-line-strong rounded-card shadow-pop overflow-hidden">
+            <div className="px-3 py-2 text-[12px] text-fg-tertiary border-b border-line">
               收藏状态 · 按数字键或回车选择
             </div>
-            {COLLECTION_OPTIONS.map((opt, i) => (
-              <button
-                key={opt.type}
-                onClick={() => setCollectionType(opt.type)}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left transition-colors ${
-                  i === paletteIndex
-                    ? "bg-indigo-600 text-white"
-                    : collection?.type === opt.type
-                      ? "bg-indigo-500/20 text-indigo-300"
-                      : "text-gray-300 hover:bg-gray-700"
-                }`}
-              >
-                <span className="text-xs text-gray-500 w-5">{opt.key}</span>
-                <span>{opt.label}</span>
-                {collection?.type === opt.type && (
-                  <span className="ml-auto text-xs text-indigo-400">当前</span>
-                )}
-              </button>
-            ))}
-            <div className="px-3 py-2 text-xs text-gray-600 border-t border-gray-700">
+            <div className="p-1.5">
+              {COLLECTION_OPTIONS.map((opt, i) => (
+                <button
+                  key={opt.type}
+                  onClick={() => setCollectionType(opt.type)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-left transition-colors ${
+                    i === paletteIndex
+                      ? "bg-accent text-accent-fg"
+                      : collection?.type === opt.type
+                        ? "bg-accent-soft text-accent"
+                        : "text-fg-secondary hover:bg-hover"
+                  }`}
+                >
+                  <kbd className={`text-[11px] w-4 ${i === paletteIndex ? "text-accent-fg/70" : "text-fg-tertiary"}`}>{opt.key}</kbd>
+                  <span>{opt.label}</span>
+                  {collection?.type === opt.type && (
+                    <span className="ml-auto text-[11px] opacity-70">当前</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="px-3 py-2 text-[12px] text-fg-tertiary border-t border-line">
               ↑↓ 导航 · Enter/数字键 选择 · Esc 关闭
             </div>
           </div>
