@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import {
   DEFAULT_SHORTCUT,
   eventToAccelerator,
@@ -23,6 +24,37 @@ export default function ShortcutRecorder({ className }: Props) {
     if (!recording) return;
     boxRef.current?.focus();
 
+    let cancelled = false;
+    const unlistenFns: Array<() => void> = [];
+
+    const applyAccelerator = async (acc: string) => {
+      try {
+        await invoke("register_shortcut", { accelerator: acc });
+        saveStoredShortcut(acc);
+        setAccelerator(acc);
+        setRecording(false);
+        setDraft(null);
+        setError(null);
+      } catch (err) {
+        setError(String(err));
+        setDraft(null);
+      }
+    };
+
+    // Native low-level keyboard hook (Windows): captures OS-reserved combos
+    // like Alt+Space and Win+key that the webview never receives.
+    invoke("start_hotkey_recording").catch(() => {});
+    listen<string>("hotkey-recorded", (e) => {
+      if (!cancelled) applyAccelerator(e.payload);
+    }).then((un) => (cancelled ? un() : unlistenFns.push(un)));
+    listen("hotkey-recording-cancel", () => {
+      if (cancelled) return;
+      setRecording(false);
+      setDraft(null);
+      setError(null);
+    }).then((un) => (cancelled ? un() : unlistenFns.push(un)));
+
+    // Fallback for platforms without the native hook: the webview keydown path.
     const onKeyDown = async (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
@@ -40,17 +72,7 @@ export default function ShortcutRecorder({ className }: Props) {
         return;
       }
 
-      try {
-        await invoke("register_shortcut", { accelerator: acc });
-        saveStoredShortcut(acc);
-        setAccelerator(acc);
-        setRecording(false);
-        setDraft(null);
-        setError(null);
-      } catch (err) {
-        setError(String(err));
-        setDraft(null);
-      }
+      await applyAccelerator(acc);
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
@@ -65,8 +87,11 @@ export default function ShortcutRecorder({ className }: Props) {
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("keyup", onKeyUp, true);
     return () => {
+      cancelled = true;
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("keyup", onKeyUp, true);
+      unlistenFns.forEach((fn) => fn());
+      invoke("stop_hotkey_recording").catch(() => {});
     };
   }, [recording]);
 

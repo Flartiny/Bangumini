@@ -8,6 +8,9 @@ use tauri::Manager;
 use tauri_plugin_global_shortcut::{
     GlobalShortcutExt, Shortcut, ShortcutState as GsShortcutState,
 };
+
+#[cfg(windows)]
+mod hotkey_recorder;
 use tauri_plugin_opener::OpenerExt;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpListener;
@@ -301,7 +304,9 @@ pub fn run() {
             get_shortcut,
             register_shortcut,
             set_autostart,
-            set_dragging
+            set_dragging,
+            start_hotkey_recording,
+            stop_hotkey_recording
         ])
         .setup(|app| {
             use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -468,6 +473,51 @@ fn set_autostart(enabled: bool) -> Result<(), String> {
 #[tauri::command]
 fn set_dragging(dragging: bool) -> Result<(), String> {
     IS_DRAGGING.store(dragging, Ordering::SeqCst);
+    Ok(())
+}
+
+/// Begin native hotkey recording. On Windows this installs a low-level keyboard
+/// hook so OS-reserved combos (Alt+Space, Win+key) can be captured, and
+/// temporarily suppresses the app's own global shortcut so it can be re-recorded.
+#[tauri::command]
+fn start_hotkey_recording(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let holder = app.state::<ShortcutHolder>();
+        if let Ok(cur) = holder.current.lock() {
+            if let Some((sc, _)) = cur.as_ref() {
+                let _ = app.global_shortcut().unregister(sc.clone());
+            }
+        }
+        hotkey_recorder::start(&app)?;
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = &app;
+    }
+    Ok(())
+}
+
+/// Stop native hotkey recording and restore the currently configured shortcut.
+#[tauri::command]
+fn stop_hotkey_recording(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        hotkey_recorder::stop();
+        let acc = app
+            .state::<ShortcutHolder>()
+            .current
+            .lock()
+            .ok()
+            .and_then(|g| g.as_ref().map(|(_, s)| s.clone()));
+        if let Some(acc) = acc {
+            let _ = install_shortcut(&app, &acc);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = &app;
+    }
     Ok(())
 }
 
