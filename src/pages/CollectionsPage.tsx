@@ -48,7 +48,7 @@ export default function CollectionsPage() {
       if (collectionType === "3") {
         return getAllUserCollections({ username: uname, type: 3 });
       }
-      return getUserCollections({ username: uname, type: parseInt(collectionType), limit: 200 });
+      return getUserCollections({ username: uname, type: parseInt(collectionType), limit: 100 });
     },
     enabled: !!uname,
     staleTime: 1000 * 60 * 60 * 24,

@@ -192,7 +192,7 @@ export async function getSubjectCharacters(
 /** GET /v0/episodes — 获取条目剧集列表 */
 export async function getEpisodes(subjectId: number): Promise<PagedResponse<Episode>> {
   return request<PagedResponse<Episode>>(
-    `/v0/episodes?subject_id=${subjectId}&limit=200`,
+    `/v0/episodes?subject_id=${subjectId}&limit=100`,
   );
 }
 

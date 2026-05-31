@@ -127,16 +127,19 @@ export default function Layout() {
         const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : [];
         if (e.key === "ArrowDown") {
           e.preventDefault();
+          e.stopPropagation();
           setFilterPaletteIndex((i) => Math.min(options.length - 1, i + 1));
           return;
         }
         if (e.key === "ArrowUp") {
           e.preventDefault();
+          e.stopPropagation();
           setFilterPaletteIndex((i) => Math.max(0, i - 1));
           return;
         }
         if (e.key === "Enter") {
           e.preventDefault();
+          e.stopPropagation();
           const opt = options[filterPaletteIndex];
           if (opt) {
             const params = new URLSearchParams(searchParams);
@@ -158,9 +161,12 @@ export default function Layout() {
         }
         if (e.key === "Escape") {
           e.preventDefault();
+          e.stopPropagation();
           setFilterPaletteOpen(false);
           return;
         }
+        // Block all other keys when palette is open
+        e.stopPropagation();
         return;
       }
 
