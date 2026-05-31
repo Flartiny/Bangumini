@@ -126,6 +126,7 @@ export default function SubjectDetailPage() {
 
       // Ctrl+O: open in browser (handle early, before other checks)
       if (e.key === "o" && (e.ctrlKey || e.metaKey)) {
+        console.log("Ctrl+O detected in SubjectDetailPage");
         e.preventDefault();
         e.stopPropagation();
         window.open(`https://bgm.tv/subject/${subjectId}`);

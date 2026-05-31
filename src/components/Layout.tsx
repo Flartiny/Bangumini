@@ -12,9 +12,9 @@ import {
 import { MOD } from "../api/shortcut";
 
 const TABS = [
-  { path: "/", label: "搜索", key: "1", Icon: SearchIcon },
+  { path: "/collections", label: "收藏", key: "1", Icon: BookmarkIcon },
   { path: "/calendar", label: "日历", key: "2", Icon: CalendarIcon },
-  { path: "/collections", label: "收藏", key: "3", Icon: BookmarkIcon },
+  { path: "/search", label: "搜索", key: "3", Icon: SearchIcon },
   { path: "/settings", label: "设置", key: "4", Icon: SettingsIcon },
 ] as const;
 
@@ -76,7 +76,7 @@ export default function Layout() {
   const [filterPaletteOpen, setFilterPaletteOpen] = useState(false);
   const [filterPaletteIndex, setFilterPaletteIndex] = useState(0);
 
-  const isSearchPage = location.pathname === "/";
+  const isSearchPage = location.pathname === "/search";
   const isCollections = location.pathname === "/collections";
   const isCalendar = location.pathname === "/calendar";
   const currentTab = TABS.findIndex((t) => t.path === location.pathname);

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { setTokenProvider } from "@shared/api/client";
 import { getAccessToken, fetchAndCacheUsername } from "./api/oauth";
@@ -47,7 +47,8 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<SearchPage />} />
+        <Route path="/" element={<Navigate to="/collections" replace />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/collections" element={<CollectionsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
