@@ -107,10 +107,12 @@ export default function Layout() {
       const isSelect = target.tagName === "SELECT";
       const mod = e.metaKey || e.ctrlKey;
 
-      // Esc: clear input if has content, otherwise hide window
+      // Esc: close filter palette if open, clear input if has content, otherwise hide window
       if (e.key === "Escape" && !mod && !e.altKey) {
         e.preventDefault();
-        if (isInput && (target as HTMLInputElement).value) {
+        if (filterPaletteOpen) {
+          setFilterPaletteOpen(false);
+        } else if (isInput && (target as HTMLInputElement).value) {
           // Clear the input
           (target as HTMLInputElement).value = "";
           // Trigger change event to update search params

@@ -4,7 +4,7 @@ import { StarIcon } from "./icons";
 /* Pill tag (e.g. watch-status / progress label) */
 export function Tag({ children }: { children: ReactNode }) {
   return (
-    <span className="shrink-0 text-[11px] leading-none px-1.5 py-1 rounded-md bg-accent-soft text-accent font-medium">
+    <span className="shrink-0 text-[12px] leading-none px-1.5 py-1 rounded-md bg-accent-soft text-accent font-medium">
       {children}
     </span>
   );
@@ -13,8 +13,8 @@ export function Tag({ children }: { children: ReactNode }) {
 /* Star rating accessory */
 export function Rating({ score }: { score: number }) {
   return (
-    <span className="shrink-0 flex items-center gap-0.5 text-[12px] text-star tabular-nums">
-      <StarIcon size={12} />
+    <span className="shrink-0 flex items-center gap-0.5 text-[13px] text-star tabular-nums">
+      <StarIcon size={13} />
       {score.toFixed(1)}
     </span>
   );
@@ -22,7 +22,7 @@ export function Rating({ score }: { score: number }) {
 
 /* Muted metadata text (type, weekday, rank…) */
 export function Meta({ children }: { children: ReactNode }) {
-  return <span className="shrink-0 text-[12px] text-fg-tertiary">{children}</span>;
+  return <span className="shrink-0 text-[13px] text-fg-tertiary">{children}</span>;
 }
 
 interface Props {
@@ -59,7 +59,7 @@ export const SubjectRow = forwardRef<HTMLDivElement, Props>(function SubjectRow(
         <div className={`${cover} rounded-md shrink-0 bg-elevated`} />
       )}
       <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium text-fg truncate">{title}</div>
+        <div className="text-[14px] font-medium text-fg truncate">{title}</div>
         {subtitle && (
           <div className="text-[12px] text-fg-tertiary truncate mt-0.5">{subtitle}</div>
         )}
