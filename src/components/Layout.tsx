@@ -112,15 +112,33 @@ export default function Layout() {
         return;
       }
 
-      // Ctrl/Cmd + P focuses the select dropdown (works even while typing in input)
+      // Ctrl/Cmd + P focuses the select dropdown and simulates Space to open it
       if (mod && e.key === "p") {
         e.preventDefault();
         const select = document.querySelector("select") as HTMLSelectElement | null;
         if (select) {
           select.focus();
-          // Trigger the dropdown to open by dispatching a mousedown event
-          const event = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
-          select.dispatchEvent(event);
+          // Simulate Space key press to open the dropdown
+          setTimeout(() => {
+            const spaceDown = new KeyboardEvent("keydown", {
+              key: " ",
+              code: "Space",
+              keyCode: 32,
+              which: 32,
+              bubbles: true,
+              cancelable: true,
+            });
+            const spaceUp = new KeyboardEvent("keyup", {
+              key: " ",
+              code: "Space",
+              keyCode: 32,
+              which: 32,
+              bubbles: true,
+              cancelable: true,
+            });
+            select.dispatchEvent(spaceDown);
+            select.dispatchEvent(spaceUp);
+          }, 50);
         }
         return;
       }

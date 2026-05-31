@@ -157,6 +157,7 @@ export default function CollectionsPage() {
   }, [focusedIndex]);
 
   // Keyboard navigation
+  // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const itemCount = paged.length;
@@ -192,7 +193,7 @@ export default function CollectionsPage() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [paged, focusedIndex, page, totalPages, navigate, searchText]);
+  }, [paged.length, focusedIndex, page, totalPages, navigate, searchText]);
 
   return (
     <div className="h-full flex flex-col">
