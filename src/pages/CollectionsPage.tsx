@@ -163,6 +163,20 @@ export default function CollectionsPage() {
       const itemCount = paged.length;
       const mod = e.ctrlKey || e.metaKey;
 
+      // Ctrl+Enter: copy focused subject name and close window
+      if (e.key === "Enter" && mod) {
+        e.preventDefault();
+        const item = paged[focusedIndex];
+        if (item) {
+          const name = item.subject.name_cn || item.subject.name;
+          navigator.clipboard.writeText(name).then(async () => {
+            const { getCurrentWindow } = await import("@tauri-apps/api/window");
+            getCurrentWindow().hide();
+          });
+        }
+        return;
+      }
+
       // Ctrl/Cmd + Left/Right = pagination. (Ctrl/Cmd + Up/Down switches sidebar
       // tabs and is handled in Layout, so we ignore those here.)
       // Also allow plain Left/Right when coming from search page with empty query.

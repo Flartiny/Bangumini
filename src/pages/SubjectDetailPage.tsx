@@ -132,6 +132,28 @@ export default function SubjectDetailPage() {
         return;
       }
 
+      // Ctrl+O: open in browser
+      if (e.key === "o" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        window.open(`https://bgm.tv/subject/${subjectId}`);
+        return;
+      }
+
+      // Ctrl+Enter or Enter (when not in input): copy subject name and close window
+      if (e.key === "Enter" && ((e.ctrlKey || e.metaKey) || !isInput)) {
+        if (!paletteOpen && !isDirty) {
+          e.preventDefault();
+          const name = subject?.name_cn || subject?.name || "";
+          if (name) {
+            navigator.clipboard.writeText(name).then(async () => {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              getCurrentWindow().hide();
+            });
+          }
+          return;
+        }
+      }
+
       if (paletteOpen) {
         if (e.key === "ArrowDown") {
           e.preventDefault();
@@ -196,7 +218,7 @@ export default function SubjectDetailPage() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [paletteOpen, paletteIndex, totalEp, currentEp, targetEp, isDirty, handleBack]);
+  }, [paletteOpen, paletteIndex, totalEp, currentEp, targetEp, isDirty, handleBack, subject]);
 
   const staffMap = new Map<string, string[]>();
   (persons ?? []).forEach((p) => {

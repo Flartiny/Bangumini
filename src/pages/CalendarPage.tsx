@@ -86,6 +86,20 @@ export default function CalendarPage() {
       const itemCount = displayItems.length;
       const mod = e.ctrlKey || e.metaKey;
 
+      // Ctrl+Enter: copy focused subject name and close window
+      if (e.key === "Enter" && mod) {
+        e.preventDefault();
+        const item = displayItems[focusedIndex];
+        if (item) {
+          const name = item.name_cn || item.name;
+          navigator.clipboard.writeText(name).then(async () => {
+            const { getCurrentWindow } = await import("@tauri-apps/api/window");
+            getCurrentWindow().hide();
+          });
+        }
+        return;
+      }
+
       // Ctrl/Cmd + Left/Right = switch day. (Ctrl/Cmd + Up/Down switches sidebar
       // tabs and is handled in Layout, so we ignore those here.)
       // Also allow plain Left/Right when not filtering.

@@ -51,6 +51,20 @@ export default function SearchPage() {
     function onKeyDown(e: KeyboardEvent) {
       const mod = e.ctrlKey || e.metaKey;
 
+      // Ctrl+Enter: copy focused subject name and close window
+      if (e.key === "Enter" && mod) {
+        e.preventDefault();
+        const s = subjects[focusedIndex];
+        if (s) {
+          const name = s.name_cn || s.name;
+          navigator.clipboard.writeText(name).then(async () => {
+            const { getCurrentWindow } = await import("@tauri-apps/api/window");
+            getCurrentWindow().hide();
+          });
+        }
+        return;
+      }
+
       // When search box is empty, allow plain Left/Right for pagination
       if (!keyword && !mod && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
         // Let CollectionsPage/CalendarPage handle pagination
