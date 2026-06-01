@@ -541,6 +541,7 @@ async fn show_toast(app: tauri::AppHandle, message: String) -> Result<(), String
         .transparent(true)
         .skip_taskbar(true)
         .always_on_top(true)
+        .shadow(false)
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;

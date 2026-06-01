@@ -118,6 +118,23 @@ button:focus-visible {
 }
 
 /* Animations */
+@keyframes shimmer-slide {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    #8b7cf6 50%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-slide 1.2s ease-in-out infinite;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;

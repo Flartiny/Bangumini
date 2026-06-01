@@ -363,7 +363,6 @@ export default function CollectionsPage() {
             ? `搜索 · 共 ${filtered.length} 条`
             : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
         </span>
-        {refreshing && <span className="text-accent animate-pulse">刷新中…</span>}
       </div>
 
       {/* Scrollable list */}
@@ -400,6 +399,12 @@ export default function CollectionsPage() {
           })}
         </div>
       </div>
+
+      {refreshing && (
+        <div className="shrink-0 h-0.5 bg-line overflow-hidden">
+          <div className="h-full w-full shimmer-bar" />
+        </div>
+      )}
     </div>
   );
 }
