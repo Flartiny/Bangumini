@@ -5,6 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getNextSeason, getNextSeasonInfo } from "@shared/api/anilist";
 import type { NextSeasonItem } from "@shared/api/anilist";
 import { searchAnimeSubject } from "@shared/api/client";
+import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import { SubjectRow, Meta } from "../components/SubjectRow";
 
 const ANILIST_WEEKDAY_CN: Record<number, string> = {
@@ -133,10 +134,13 @@ export default function NextSeasonPage() {
       if (filterText) {
         const display = item.nameCn || item.title.native;
         if (
-          !display.toLowerCase().includes(lower) &&
-          !item.title.native.toLowerCase().includes(lower) &&
-          !item.title.romaji.toLowerCase().includes(lower)
-        ) return false;
+          display.toLowerCase().includes(lower) ||
+          item.title.native.toLowerCase().includes(lower) ||
+          item.title.romaji.toLowerCase().includes(lower)
+        ) return true;
+        const kw = buildSubjectKeywords(item.nameCn ?? undefined, item.title.native);
+        if (kw.some((k) => k.toLowerCase().includes(lower))) return true;
+        return false;
       }
       return true;
     });
@@ -328,8 +332,19 @@ export default function NextSeasonPage() {
             })()
           )
         ) : (
-          <div className="space-y-0.5">
-            {currentItems.map((item, index) => {
+          <>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h2 className="text-[15px] font-semibold text-fg">
+                {currentDay === "tba" ? "未定 (TBA)" : ANILIST_WEEKDAY_CN[currentDay]}
+              </h2>
+              <span className="text-[12px] text-fg-tertiary">← → 切换日期</span>
+            </div>
+
+            {currentItems.length === 0 ? (
+              <p className="text-[13px] text-fg-tertiary px-1">暂无放送</p>
+            ) : (
+              <div className="space-y-0.5">
+              {currentItems.map((item, index) => {
               const displayName = item.nameCn || item.title.native;
               const dateStr = formatDate(item, seasonLabel);
               const timeStr = item.airingAt
@@ -363,7 +378,9 @@ export default function NextSeasonPage() {
                 />
               );
             })}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
