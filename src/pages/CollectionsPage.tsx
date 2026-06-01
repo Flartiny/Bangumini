@@ -57,7 +57,12 @@ function readAiringCache(subjectId: number): AiringTime | null {
   try {
     const raw = localStorage.getItem(`${AIRING_CACHE_PREFIX}${subjectId}`);
     if (!raw) return null;
-    return JSON.parse(raw) as AiringTime;
+    const parsed = JSON.parse(raw);
+    // new format: { airingAt, episode }
+    if (typeof parsed.airingAt === "number") return parsed as AiringTime;
+    // old format: { title, value: { airingAt, episode }, cachedAt }
+    if (parsed.value && typeof parsed.value.airingAt === "number") return parsed.value as AiringTime;
+    return null;
   } catch {
     return null;
   }
@@ -85,6 +90,7 @@ export default function CollectionsPage() {
   const restoredPageState = useMemo(() => readPageState(collectionType, searchText), [collectionType, searchText]);
   const [page, setPage] = useState(restoredPageState.page);
   const [focusedIndex, setFocusedIndex] = useState(restoredPageState.focusedIndex);
+  const [refreshing, setRefreshing] = useState(false);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const isWatching = collectionType === "3";
   const today = getTodayBangumiWeekday();
@@ -274,6 +280,7 @@ export default function CollectionsPage() {
   }
 
   const clearAiringCache = async () => {
+    setRefreshing(true);
     for (let i = localStorage.length - 1; i >= 0; i -= 1) {
       const key = localStorage.key(i);
       if (key?.startsWith(AIRING_CACHE_PREFIX)) {
@@ -281,6 +288,9 @@ export default function CollectionsPage() {
       }
     }
     queryClient.resetQueries({ queryKey: ["anilist-airing-times"] });
+    await queryClient.refetchQueries({ queryKey: ["anilist-airing-times"] });
+    setRefreshing(false);
+    invoke("show_toast", { message: "播出时间已刷新" });
   };
 
   // Keyboard navigation
@@ -347,10 +357,13 @@ export default function CollectionsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Page indicator */}
-      <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0">
-        {searchText
-          ? `搜索 · 共 ${filtered.length} 条`
-          : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
+      <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0 flex items-center gap-2">
+        <span>
+          {searchText
+            ? `搜索 · 共 ${filtered.length} 条`
+            : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
+        </span>
+        {refreshing && <span className="text-accent animate-pulse">刷新中…</span>}
       </div>
 
       {/* Scrollable list */}
