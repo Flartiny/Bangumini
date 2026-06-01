@@ -470,7 +470,7 @@ fn register_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), S
 #[tauri::command]
 fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
-    let manager = app.autostart();
+    let manager = app.autolaunch();
     if enabled {
         manager.enable().map_err(|e| e.to_string())
     } else {
@@ -481,7 +481,7 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
 #[tauri::command]
 fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
-    app.autostart().is_enabled().map_err(|e| e.to_string())
+    app.autolaunch().is_enabled().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
