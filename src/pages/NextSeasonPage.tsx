@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getNextSeason, getNextSeasonInfo } from "@shared/api/anilist";
@@ -63,10 +63,13 @@ function earliestEntryDay(entries: SeasonEntry[]): number | "tba" {
 
 export default function NextSeasonPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const filterText = searchParams.get("filter") ?? "";
   const { label: seasonLabel } = getNextSeasonInfo();
   const [currentDay, setCurrentDay] = useState<number | "tba">(0);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const isFiltering = filterText !== "";
 
   const { data: entries = [], isLoading } = useQuery({
     queryKey: ["next-season"],
@@ -120,12 +123,26 @@ export default function NextSeasonPage() {
     setCurrentDay(earliestEntryDay(entries));
   }, [entries.length]);
 
-  const currentItems = groups.get(currentDay) ?? [];
+  // Filtered items (flat list across all days)
+  const filteredItems = useMemo(() => {
+    if (!isFiltering) return [];
+    const lower = filterText.toLowerCase();
+    return entries.filter((item) => {
+      const display = item.nameCn || item.title.native;
+      return (
+        display.toLowerCase().includes(lower) ||
+        item.title.native.toLowerCase().includes(lower) ||
+        item.title.romaji.toLowerCase().includes(lower)
+      );
+    });
+  }, [entries, filterText, isFiltering]);
 
-  // Reset focus when day changes
+  const currentItems = isFiltering ? filteredItems : (groups.get(currentDay) ?? []);
+
+  // Reset focus when day or filter changes
   useEffect(() => {
     setFocusedIndex(0);
-  }, [currentDay]);
+  }, [currentDay, filterText]);
 
   // Scroll focused item into view
   useEffect(() => {
@@ -170,7 +187,7 @@ export default function NextSeasonPage() {
         return;
       }
 
-      if (e.key === "ArrowLeft") {
+      if (e.key === "ArrowLeft" && !isFiltering) {
         e.preventDefault();
         setCurrentDay((d) => {
           if (d === "tba") {
@@ -189,7 +206,7 @@ export default function NextSeasonPage() {
         return;
       }
 
-      if (e.key === "ArrowRight") {
+      if (e.key === "ArrowRight" && !isFiltering) {
         e.preventDefault();
         setCurrentDay((d) => {
           if (d === "tba") return "tba";
@@ -223,35 +240,41 @@ export default function NextSeasonPage() {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentItems, focusedIndex, navigate, availableDays, hasTba]);
+  }, [currentItems, focusedIndex, navigate, availableDays, hasTba, isFiltering]);
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0 flex items-center gap-2">
-        <span>{seasonLabel}新番 · 共 {entries.length} 部</span>
-        <select
-          className="appearance-none bg-elevated border border-line rounded-md pl-2.5 pr-7 py-0.5 text-[12px] text-fg-secondary hover:text-fg focus:border-accent focus:outline-none"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-            backgroundRepeat: "no-repeat",
-            backgroundPosition: "right 0.5rem center",
-            backgroundSize: "12px",
-          }}
-          value={String(currentDay)}
-          onChange={(e) => setCurrentDay(e.target.value === "tba" ? "tba" : Number(e.target.value))}
-        >
-          {dayOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
+        {isFiltering ? (
+          <span>筛选"{filterText}" · 共 {filteredItems.length} 条</span>
+        ) : (
+          <>
+            <span>{seasonLabel}新番 · 共 {entries.length} 部</span>
+            <select
+              className="appearance-none bg-elevated border border-line rounded-md pl-2.5 pr-7 py-0.5 text-[12px] text-fg-secondary hover:text-fg focus:border-accent focus:outline-none"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                backgroundRepeat: "no-repeat",
+                backgroundPosition: "right 0.5rem center",
+                backgroundSize: "12px",
+              }}
+              value={String(currentDay)}
+              onChange={(e) => setCurrentDay(e.target.value === "tba" ? "tba" : Number(e.target.value))}
+            >
+              {dayOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </>
+        )}
       </div>
 
       {/* List */}
       <div className="flex-1 overflow-y-auto p-2.5">
         {isLoading && <p className="text-fg-tertiary text-[13px] px-1">加载中…</p>}
 
-        {!isLoading && currentDay === "tba" && (
+        {!isLoading && !isFiltering && currentDay === "tba" && (
           <p className="text-[12px] text-fg-tertiary mb-2 px-1">播出日期未定</p>
         )}
 

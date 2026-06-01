@@ -81,6 +81,7 @@ export default function Layout() {
   const isSearchPage = location.pathname === "/search";
   const isCollections = location.pathname === "/collections";
   const isCalendar = location.pathname === "/calendar";
+  const isNextSeason = location.pathname === "/next-season";
   const currentTab = TABS.findIndex((t) => t.path === location.pathname);
   const currentTabRef = useRef(currentTab);
   currentTabRef.current = currentTab;
@@ -146,7 +147,7 @@ export default function Layout() {
 
       // Filter palette navigation
       if (filterPaletteOpen) {
-        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : [];
+        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : isNextSeason ? [] : [];
         if (e.key === "ArrowDown") {
           e.preventDefault();
           e.stopPropagation();
@@ -228,7 +229,7 @@ export default function Layout() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, filterPaletteOpen, filterPaletteIndex, isSearchPage, isCollections, isCalendar, searchParams, setSearchParams]);
+  }, [navigate, filterPaletteOpen, filterPaletteIndex, isSearchPage, isCollections, isCalendar, isNextSeason, searchParams, setSearchParams]);
 
   // Persistent input: keep the page's search/filter box focused so the user can
   // type immediately on every page and after the window is re-summoned.
@@ -392,6 +393,32 @@ export default function Layout() {
       );
     }
 
+    if (isNextSeason) {
+      const filter = searchParams.get("filter") ?? "";
+      return (
+        <div className="relative flex-1 max-w-md">
+          <SearchIcon
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-tertiary pointer-events-none"
+          />
+          <input
+            ref={inputRef}
+            key={location.pathname}
+            defaultValue={filter}
+            placeholder="筛选新番…"
+            className="w-full pl-9 pr-3 py-1.5 text-[13px] bg-elevated rounded-md border border-line text-fg placeholder-fg-tertiary focus:border-accent focus:outline-none"
+            onInput={(e) => {
+              const v = e.currentTarget.value;
+              const params = new URLSearchParams(searchParams);
+              if (v) params.set("filter", v);
+              else params.delete("filter");
+              setSearchParams(params, { replace: true });
+            }}
+          />
+        </div>
+      );
+    }
+
     return <h1 className="text-[13px] font-medium text-fg-secondary">设置</h1>;
   })();
 
@@ -485,13 +512,15 @@ export default function Layout() {
 
       {/* Filter Palette Overlay */}
       {filterPaletteOpen && (() => {
-        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : [];
+        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : isNextSeason ? [] : [];
         const currentValue = isSearchPage
           ? searchParams.get("stype") ?? "2"
           : isCollections
             ? searchParams.get("type") ?? "3"
-            : searchParams.get("weekday") ?? "";
-        const title = isSearchPage ? "条目类型" : isCollections ? "收藏状态" : "星期筛选";
+            : isCalendar
+              ? searchParams.get("weekday") ?? ""
+              : "";
+        const title = isSearchPage ? "条目类型" : isCollections ? "收藏状态" : isCalendar ? "星期筛选" : "";
 
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
