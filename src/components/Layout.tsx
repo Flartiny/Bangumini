@@ -477,6 +477,7 @@ export default function Layout() {
           <KeyHint k={`${MOD}←→`} label="翻页" />
           <KeyHint k={`${MOD}↑↓`} label="切标签" />
           <KeyHint k="Tab" label="侧边栏" />
+          {isCollections && <KeyHint k={`${MOD}R`} label="刷新播出时间" />}
         </footer>
       </div>
 

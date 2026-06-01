@@ -18,11 +18,9 @@ import { MOD } from "../api/shortcut";
 
 const LIMIT = 20;
 const AIRING_CACHE_PREFIX = "bangumini-anilist-";
-const AIRING_CACHE_TTL = 1000 * 60 * 60 * 24;
 const AIRING_REQUEST_DELAY = 700;
 
 type AiringTime = { airingAt: number; episode: number };
-type AiringCache = { title: string; value: AiringTime; cachedAt: number };
 type CollectionsLocationState = {
   fromSubject?: boolean;
   subjectId?: number;
@@ -55,24 +53,20 @@ function writePageState(collectionType: string, searchText: string, page: number
   );
 }
 
-function readAiringCache(subjectId: number, titles: string[]): AiringCache | null {
+function readAiringCache(subjectId: number): AiringTime | null {
   try {
     const raw = localStorage.getItem(`${AIRING_CACHE_PREFIX}${subjectId}`);
     if (!raw) return null;
-    const cached = JSON.parse(raw) as AiringCache;
-    if (!titles.includes(cached.title)) return null;
-    if (Date.now() - cached.cachedAt > AIRING_CACHE_TTL) return null;
-    if (cached.value.airingAt * 1000 < Date.now()) return null;
-    return cached;
+    return JSON.parse(raw) as AiringTime;
   } catch {
     return null;
   }
 }
 
-function writeAiringCache(subjectId: number, title: string, value: AiringTime) {
+function writeAiringCache(subjectId: number, value: AiringTime) {
   localStorage.setItem(
     `${AIRING_CACHE_PREFIX}${subjectId}`,
-    JSON.stringify({ title, value, cachedAt: Date.now() } satisfies AiringCache),
+    JSON.stringify(value),
   );
 }
 
@@ -191,7 +185,7 @@ export default function CollectionsPage() {
       .filter((item) => airingMap.has(item.subject_id) && item.ep_status > 0)
       .map((item) => ({
         subjectId: item.subject_id,
-        titles: [item.subject.name, item.subject.name_cn].filter(Boolean),
+        name: item.subject.name,
       }));
   }, [sorted, airingMap, isWatching]);
 
@@ -199,30 +193,28 @@ export default function CollectionsPage() {
     queryKey: ["anilist-airing-times", airingTimeTargets.map((item) => item.subjectId).join(",")],
     queryFn: async () => {
       const map = new Map<number, AiringTime>();
-      const missing: typeof airingTimeTargets = [];
 
       for (const item of airingTimeTargets) {
-        const cached = readAiringCache(item.subjectId, item.titles);
+        const cached = readAiringCache(item.subjectId);
         if (cached) {
-          map.set(item.subjectId, cached.value);
-        } else {
-          missing.push(item);
+          map.set(item.subjectId, cached);
         }
       }
 
+      const missing = airingTimeTargets.filter((item) => !map.has(item.subjectId));
       for (const [index, item] of missing.entries()) {
         if (index > 0) await delay(AIRING_REQUEST_DELAY);
-        const value = await getAiringAt(...item.titles);
-        if (value) {
-          writeAiringCache(item.subjectId, item.titles[0], value);
-          map.set(item.subjectId, value);
+        if (!item.name) continue;
+        const result = await getAiringAt(item.name);
+        if (result) {
+          writeAiringCache(item.subjectId, result);
+          map.set(item.subjectId, result);
         }
       }
 
       return map;
     },
     enabled: isWatching && airingTimeTargets.length > 0,
-    staleTime: AIRING_CACHE_TTL,
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / LIMIT));
@@ -355,15 +347,10 @@ export default function CollectionsPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Page indicator */}
-      <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0 flex items-center justify-between gap-2">
-        <span>
-          {searchText
-            ? `搜索 · 共 ${filtered.length} 条`
-            : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
-        </span>
-        {isWatching && (
-          <span className="shrink-0">{MOD}R 刷新播出时间</span>
-        )}
+      <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0">
+        {searchText
+          ? `搜索 · 共 ${filtered.length} 条`
+          : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
       </div>
 
       {/* Scrollable list */}
