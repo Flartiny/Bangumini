@@ -1,9 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { clearToken, setToken } from "../api/oauth";
 import ShortcutRecorder from "../components/ShortcutRecorder";
 
 export default function SettingsPage() {
   const [tokenText, setTokenText] = useState("");
+  const [autostart, setAutostart] = useState(false);
+  const [autostartLoading, setAutostartLoading] = useState(true);
+
+  useEffect(() => {
+    invoke<boolean>("get_autostart")
+      .then(setAutostart)
+      .catch(() => setAutostart(false))
+      .finally(() => setAutostartLoading(false));
+  }, []);
+
+  const toggleAutostart = async () => {
+    const next = !autostart;
+    try {
+      await invoke("set_autostart", { enabled: next });
+      setAutostart(next);
+    } catch {
+      // toggle failed, leave unchanged
+    }
+  };
 
   return (
     <div className="p-5 max-w-lg space-y-6">
@@ -44,7 +64,22 @@ export default function SettingsPage() {
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">通用</h3>
         <div className="flex items-center justify-between">
           <span className="text-[13px] text-fg-secondary">开机自启动</span>
-          <span className="text-[12px] text-fg-tertiary">（待实现）</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={autostart}
+            disabled={autostartLoading}
+            onClick={toggleAutostart}
+            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+              autostartLoading ? "opacity-40" : ""
+            } ${autostart ? "bg-accent" : "bg-line"}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform duration-200 ${
+                autostart ? "translate-x-4" : "translate-x-0"
+              }`}
+            />
+          </button>
         </div>
       </section>
 

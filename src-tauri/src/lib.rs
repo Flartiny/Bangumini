@@ -305,6 +305,7 @@ pub fn run() {
             get_shortcut,
             register_shortcut,
             set_autostart,
+            get_autostart,
             set_dragging,
             show_toast,
             start_hotkey_recording,
@@ -467,9 +468,20 @@ fn register_shortcut(app: tauri::AppHandle, accelerator: String) -> Result<(), S
 }
 
 #[tauri::command]
-fn set_autostart(enabled: bool) -> Result<(), String> {
-    if enabled { println!("Autostart enabled"); } else { println!("Autostart disabled"); }
-    Ok(())
+fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let manager = app.autostart();
+    if enabled {
+        manager.enable().map_err(|e| e.to_string())
+    } else {
+        manager.disable().map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autostart().is_enabled().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
