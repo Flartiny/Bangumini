@@ -41,6 +41,55 @@ function formatDate(item: NextSeasonItem, seasonLabel: string): string {
   return seasonLabel;
 }
 
+const NEXT_SEASON_CACHE_PREFIX = "bangumini-next-season-";
+const NEXT_SEASON_CACHE_TTL = 1000 * 60 * 60 * 24; // 1 day
+
+function getNextSeasonCacheKey(): string {
+  const { season, seasonYear } = getNextSeasonInfo();
+  return `${NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
+}
+
+function readNextSeasonCache(): SeasonEntry[] | null {
+  try {
+    const raw = localStorage.getItem(getNextSeasonCacheKey());
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { entries: SeasonEntry[]; cachedAt: number };
+    if (!cached.entries || !cached.cachedAt) return null;
+    return cached.entries;
+  } catch {
+    return null;
+  }
+}
+
+function writeNextSeasonCache(entries: SeasonEntry[]) {
+  localStorage.setItem(
+    getNextSeasonCacheKey(),
+    JSON.stringify({ entries, cachedAt: Date.now() }),
+  );
+}
+
+function cleanOldNextSeasonCaches() {
+  const currentKey = getNextSeasonCacheKey();
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    const key = localStorage.key(i);
+    if (key?.startsWith(NEXT_SEASON_CACHE_PREFIX) && key !== currentKey) {
+      localStorage.removeItem(key);
+    }
+  }
+}
+
+function isAired(item: SeasonEntry): boolean {
+  const nowSec = Date.now() / 1000;
+  if (item.airingAt && item.airingAt < nowSec) return true;
+  // For items without airingAt, check startDate
+  const { year, month, day } = item.startDate;
+  if (year && month && day) {
+    const startSec = new Date(year, month - 1, day).getTime() / 1000;
+    if (startSec < nowSec - 86400) return true; // more than 1 day past start
+  }
+  return false;
+}
+
 function earliestEntryDay(entries: SeasonEntry[]): number | "tba" {
   let earliestDay: number | "tba" = "tba";
   let earliestDate: Date | null = null;
@@ -73,8 +122,13 @@ export default function NextSeasonPage() {
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const isFiltering = filterText !== "" || filterWeekday !== "";
 
+  const seedCache = useMemo(() => {
+    cleanOldNextSeasonCaches();
+    return readNextSeasonCache() ?? [];
+  }, []);
+
   const { data: entries = [], isLoading } = useQuery({
-    queryKey: ["next-season"],
+    queryKey: ["next-season", seasonLabel],
     queryFn: async () => {
       const items = await getNextSeason();
 
@@ -91,11 +145,16 @@ export default function NextSeasonPage() {
         }),
       );
 
-      return results
+      const enriched = results
         .filter((r): r is PromiseFulfilledResult<SeasonEntry> => r.status === "fulfilled")
-        .map((r) => r.value);
+        .map((r) => r.value)
+        .filter((e) => !isAired(e));
+
+      writeNextSeasonCache(enriched);
+      return enriched;
     },
-    staleTime: 1000 * 60 * 60 * 24,
+    placeholderData: seedCache.length > 0 ? seedCache : undefined,
+    staleTime: NEXT_SEASON_CACHE_TTL,
   });
 
   // Group by weekday
