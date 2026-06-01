@@ -512,7 +512,6 @@ async fn show_toast(app: tauri::AppHandle, message: String) -> Result<(), String
             font-size: 13px;
             font-weight: 500;
             border-radius: 8px;
-            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
             animation: fade-in 0.2s ease-out;
             border: none;
         }}

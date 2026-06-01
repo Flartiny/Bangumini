@@ -255,7 +255,6 @@ export default function CollectionsPage() {
     if (paged.length > 0) {
       setFocusedIndex((i) => Math.min(i, paged.length - 1));
     }
-    itemRefs.current = [];
   }, [paged.length, page]);
 
   useEffect(() => {
@@ -270,7 +269,7 @@ export default function CollectionsPage() {
     if (item) {
       item.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-  }, [focusedIndex]);
+  }, [focusedIndex, paged]);
 
   function openSubject(subjectId: number) {
     writePageState(collectionType, searchText, page, focusedIndex);
