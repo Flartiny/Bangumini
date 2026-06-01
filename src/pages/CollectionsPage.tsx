@@ -23,7 +23,6 @@ const AIRING_REQUEST_DELAY = 700;
 
 type AiringTime = { airingAt: number; episode: number };
 type AiringCache = { title: string; value: AiringTime; cachedAt: number };
-type AiringTimeTarget = { subjectId: number; titles: string[] };
 type CollectionsLocationState = {
   fromSubject?: boolean;
   subjectId?: number;
@@ -255,7 +254,9 @@ export default function CollectionsPage() {
   }, [filtered.length]);
 
   useEffect(() => {
-    setFocusedIndex((i) => Math.min(i, Math.max(0, paged.length - 1)));
+    if (paged.length > 0) {
+      setFocusedIndex((i) => Math.min(i, paged.length - 1));
+    }
     itemRefs.current = [];
   }, [paged.length, page]);
 
@@ -280,11 +281,29 @@ export default function CollectionsPage() {
     });
   }
 
+  const clearAiringCache = async () => {
+    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(AIRING_CACHE_PREFIX)) {
+        localStorage.removeItem(key);
+      }
+    }
+    queryClient.resetQueries({ queryKey: ["anilist-airing-times"] });
+  };
+
   // Keyboard navigation
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const itemCount = paged.length;
       const mod = e.ctrlKey || e.metaKey;
+
+      if (e.key === "r" && mod && !isWatching) return; // let browser handle Ctrl+R on non-watching pages
+
+      if (e.key === "r" && mod && isWatching) {
+        e.preventDefault();
+        clearAiringCache();
+        return;
+      }
 
       // Ctrl+Enter: copy focused subject name and close window
       if (e.key === "Enter" && mod) {
@@ -333,16 +352,6 @@ export default function CollectionsPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [paged.length, focusedIndex, page, totalPages, navigate, searchText]);
 
-  const clearAiringCache = async () => {
-    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(AIRING_CACHE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    }
-    await queryClient.invalidateQueries({ queryKey: ["anilist-airing-times"] });
-  };
-
   return (
     <div className="h-full flex flex-col">
       {/* Page indicator */}
@@ -353,13 +362,7 @@ export default function CollectionsPage() {
             : `第 ${page} / ${totalPages} 页 · 共 ${sorted.length} 条${totalPages > 1 ? ` · ${MOD}←→ 翻页` : ""}`}
         </span>
         {isWatching && (
-          <button
-            type="button"
-            className="shrink-0 rounded px-1.5 py-0.5 text-[12px] text-fg-secondary hover:bg-bg-hover hover:text-fg-primary"
-            onClick={clearAiringCache}
-          >
-            刷新播出时间
-          </button>
+          <span className="shrink-0">{MOD}R 刷新播出时间</span>
         )}
       </div>
 
