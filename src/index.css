@@ -40,10 +40,19 @@
   --shadow-pop: 0 12px 40px -8px rgba(0, 0, 0, 0.6);
 }
 
+html {
+  color-scheme: dark;
+  background: transparent;
+}
+
 html,
-body {
+body,
+#root {
   margin: 0;
   height: 100vh;
+}
+
+body {
   font-family:
     "Inter", system-ui, -apple-system, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
@@ -57,14 +66,11 @@ body {
 }
 
 #root {
-  height: 100vh;
   display: flex;
   flex-direction: column;
-  /* Rounded translucent window shell. Semi-opaque so it still reads as a
-     solid dark panel even when the OS blur effect is unavailable. */
   background: color-mix(in srgb, var(--color-surface) 86%, transparent);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius-window);
+  box-shadow: 0 0 0 1px var(--color-line);
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -149,3 +155,5 @@ button:focus-visible {
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
 }
+
+

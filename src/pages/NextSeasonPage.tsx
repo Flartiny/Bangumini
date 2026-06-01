@@ -189,6 +189,7 @@ export default function NextSeasonPage() {
     if (!isFiltering) return [];
     const lower = filterText.toLowerCase();
     let items = entries.filter((item) => {
+      if (filterWeekday === "nontv") return item.format !== "TV";
       if (filterWeekday && String(item.weekday ?? "tba") !== filterWeekday) return false;
       if (filterText) {
         const display = item.nameCn || item.title.native;
@@ -322,7 +323,7 @@ export default function NextSeasonPage() {
         <div className="px-4 py-1.5 text-[12px] text-fg-tertiary border-b border-line shrink-0">
           <span>
             筛选{filterText ? `"${filterText}"` : ""}
-            {filterWeekday && ` · ${ANILIST_WEEKDAY_CN[parseInt(filterWeekday)]}`}
+            {filterWeekday && ` · ${filterWeekday === "tba" ? "未定" : filterWeekday === "nontv" ? "非TV" : ANILIST_WEEKDAY_CN[parseInt(filterWeekday)]}`}
             {" "}· 共 {allFilteredItems.length} 条
           </span>
         </div>

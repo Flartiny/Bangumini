@@ -12,6 +12,7 @@ import {
   StarIcon,
 } from "./icons";
 import { MOD } from "../api/shortcut";
+import CustomSelect from "./CustomSelect";
 
 const TABS = [
   { path: "/collections", label: "收藏", key: "1", Icon: BookmarkIcon },
@@ -47,6 +48,8 @@ const NEXT_SEASON_WEEKDAYS = [
   { value: "4", label: "周四" },
   { value: "5", label: "周五" },
   { value: "6", label: "周六" },
+  { value: "tba", label: "未定" },
+  { value: "nontv", label: "非TV" },
 ];
 
 const CALENDAR_WEEKDAYS = [
@@ -62,11 +65,7 @@ const CALENDAR_WEEKDAYS = [
 
 const SIDEBAR_KEY = "bangumini_sidebar_collapsed";
 
-const selectClass =
-  "appearance-none bg-elevated border border-line rounded-md pl-2.5 pr-7 py-1.5 text-[13px] text-fg-secondary hover:text-fg focus:border-accent focus:outline-none bg-[length:12px] bg-no-repeat bg-[right_0.5rem_center]";
-// Down-chevron rendered as an inline SVG data URI so native <select> matches the theme.
-const selectArrow =
-  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")";
+type FilterPaletteKind = "search" | "collections" | "calendar" | "next-season";
 
 function KeyHint({ k, label }: { k: string; label: string }) {
   return (
@@ -89,6 +88,7 @@ export default function Layout() {
   );
   const [filterPaletteOpen, setFilterPaletteOpen] = useState(false);
   const [filterPaletteIndex, setFilterPaletteIndex] = useState(0);
+  const [filterPaletteKind, setFilterPaletteKind] = useState<FilterPaletteKind>("search");
 
   const isSearchPage = location.pathname === "/search";
   const isCollections = location.pathname === "/collections";
@@ -102,6 +102,66 @@ export default function Layout() {
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
+
+  function getPaletteConfig(kind: FilterPaletteKind) {
+    if (kind === "search") {
+      return {
+        options: SUBJECT_TYPES,
+        currentValue: searchParams.get("stype") ?? "2",
+        title: "条目类型",
+      };
+    }
+    if (kind === "collections") {
+      return {
+        options: COLLECTION_TYPES,
+        currentValue: searchParams.get("type") ?? "3",
+        title: "收藏状态",
+      };
+    }
+    if (kind === "calendar") {
+      return {
+        options: CALENDAR_WEEKDAYS,
+        currentValue: searchParams.get("weekday") ?? "",
+        title: "星期筛选",
+      };
+    }
+    return {
+      options: NEXT_SEASON_WEEKDAYS,
+      currentValue: searchParams.get("weekday") ?? "",
+      title: "星期筛选",
+    };
+  }
+
+  function applyPaletteValue(kind: FilterPaletteKind, nextValue: string) {
+    const params = new URLSearchParams(searchParams);
+
+    if (kind === "search") {
+      if (nextValue) params.set("stype", nextValue);
+      else params.delete("stype");
+    } else if (kind === "collections") {
+      params.set("type", nextValue);
+      params.delete("filter");
+    } else {
+      if (nextValue) params.set("weekday", nextValue);
+      else params.delete("weekday");
+      params.delete("filter");
+    }
+
+    setSearchParams(params, { replace: true });
+  }
+
+  function openFilterPalette(kind: FilterPaletteKind) {
+    const { options, currentValue } = getPaletteConfig(kind);
+    const idx = options.findIndex((o) => o.value === currentValue);
+    setFilterPaletteKind(kind);
+    setFilterPaletteIndex(idx >= 0 ? idx : 0);
+    setFilterPaletteOpen(true);
+  }
+
+  function closeFilterPalette() {
+    setFilterPaletteOpen(false);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
   const handleHeaderMouseDown = async (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -123,19 +183,15 @@ export default function Layout() {
       const isSelect = target.tagName === "SELECT";
       const mod = e.metaKey || e.ctrlKey;
 
-      // Esc: close filter palette if open, clear input if has content, otherwise hide window
       if (e.key === "Escape" && !mod && !e.altKey) {
         e.preventDefault();
         if (filterPaletteOpen) {
-          setFilterPaletteOpen(false);
+          closeFilterPalette();
         } else if (isInput && (target as HTMLInputElement).value) {
-          // Clear the input
           (target as HTMLInputElement).value = "";
-          // Trigger change event to update search params
           const event = new Event("input", { bubbles: true });
           target.dispatchEvent(event);
         } else {
-          // Hide window
           import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
             getCurrentWindow().hide();
           });
@@ -143,33 +199,27 @@ export default function Layout() {
         return;
       }
 
-      // Tab toggles the sidebar (prevent default tab behavior on input)
       if (e.key === "Tab" && !mod && !e.altKey) {
         e.preventDefault();
         setCollapsed((v) => !v);
         return;
       }
 
-      // Ctrl/Cmd + P opens filter palette
       if (mod && e.key === "p") {
         e.preventDefault();
-        const currentValue = isSearchPage
-          ? searchParams.get("stype") ?? "2"
-          : isCollections
-            ? searchParams.get("type") ?? "3"
-            : isCalendar || isNextSeason
-              ? searchParams.get("weekday") ?? ""
-              : "";
-        const filterOptions = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : isNextSeason ? NEXT_SEASON_WEEKDAYS : [];
-        const idx = filterOptions.findIndex((o) => o.value === currentValue);
-        setFilterPaletteOpen((prev) => !prev);
-        setFilterPaletteIndex(idx >= 0 ? idx : 0);
+        if (filterPaletteOpen) {
+          closeFilterPalette();
+          return;
+        }
+        if (isSearchPage) openFilterPalette("search");
+        else if (isCollections) openFilterPalette("collections");
+        else if (isCalendar) openFilterPalette("calendar");
+        else if (isNextSeason) openFilterPalette("next-season");
         return;
       }
 
-      // Filter palette navigation
       if (filterPaletteOpen) {
-        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : isNextSeason ? NEXT_SEASON_WEEKDAYS : [];
+        const { options } = getPaletteConfig(filterPaletteKind);
         if (e.key === "ArrowDown") {
           e.preventDefault();
           e.stopPropagation();
@@ -187,35 +237,21 @@ export default function Layout() {
           e.stopPropagation();
           const opt = options[filterPaletteIndex];
           if (opt) {
-            const params = new URLSearchParams(searchParams);
-            if (isSearchPage) {
-              if (opt.value) params.set("stype", opt.value);
-              else params.delete("stype");
-            } else if (isCollections) {
-              params.set("type", opt.value);
-              params.delete("filter");
-            } else if (isCalendar) {
-              if (opt.value) params.set("weekday", opt.value);
-              else params.delete("weekday");
-              params.delete("filter");
-            }
-            setSearchParams(params, { replace: true });
-            setFilterPaletteOpen(false);
+            applyPaletteValue(filterPaletteKind, opt.value);
+            closeFilterPalette();
           }
           return;
         }
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          setFilterPaletteOpen(false);
+          closeFilterPalette();
           return;
         }
-        // Block all other keys when palette is open
         e.stopPropagation();
         return;
       }
 
-      // Ctrl/Cmd + Up/Down cycles through sidebar tabs (works even while typing)
       if (mod && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
         e.preventDefault();
         const dir = e.key === "ArrowDown" ? 1 : -1;
@@ -225,8 +261,6 @@ export default function Layout() {
         return;
       }
 
-      // Ctrl/Cmd + 1..4 jumps to a tab; Ctrl/Cmd + K refocuses the input.
-      // Both work even while typing so navigation never requires leaving the input.
       if (mod) {
         const tab = TABS.find((t) => t.key === e.key);
         if (tab) {
@@ -243,7 +277,6 @@ export default function Layout() {
 
       if (isInput || isSelect) return;
 
-      // "/" jumps into the input when focus happens to be elsewhere
       if (e.key === "/") {
         e.preventDefault();
         inputRef.current?.focus();
@@ -251,10 +284,8 @@ export default function Layout() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [navigate, filterPaletteOpen, filterPaletteIndex, isSearchPage, isCollections, isCalendar, isNextSeason, searchParams, setSearchParams]);
+  }, [navigate, filterPaletteOpen, filterPaletteIndex, filterPaletteKind, isSearchPage, isCollections, isCalendar, isNextSeason, searchParams, setSearchParams]);
 
-  // Persistent input: keep the page's search/filter box focused so the user can
-  // type immediately on every page and after the window is re-summoned.
   useEffect(() => {
     inputRef.current?.focus();
   }, [location.pathname]);
@@ -283,7 +314,6 @@ export default function Layout() {
               placeholder="搜索条目…"
               className="w-full pl-9 pr-3 py-1.5 text-[13px] bg-elevated rounded-md border border-line text-fg placeholder-fg-tertiary focus:border-accent focus:outline-none"
               onInput={(e) => {
-                // Handle programmatic clear from Esc key
                 const val = e.currentTarget.value.trim();
                 if (!val && q) {
                   const params = new URLSearchParams(searchParams);
@@ -294,9 +324,6 @@ export default function Layout() {
               onKeyDown={(e) => {
                 if (e.key !== "Enter") return;
                 const val = e.currentTarget.value.trim();
-                // Only (re)submit when the query actually changed. For an
-                // unchanged query, let the event reach SearchPage so Enter
-                // opens the currently focused result instead of re-searching.
                 if (val && val !== q) {
                   e.nativeEvent.stopImmediatePropagation();
                   const params = new URLSearchParams();
@@ -307,21 +334,7 @@ export default function Layout() {
               }}
             />
           </div>
-          <select
-            value={stype}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-                if (e.currentTarget.value) params.set("stype", e.currentTarget.value);
-                else params.delete("stype");
-              setSearchParams(params, { replace: true });
-            }}
-            className={selectClass}
-            style={{ backgroundImage: selectArrow }}
-          >
-            {SUBJECT_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          <CustomSelect options={SUBJECT_TYPES} value={stype} onChange={() => openFilterPalette("search")} />
         </>
       );
     }
@@ -351,22 +364,7 @@ export default function Layout() {
               }}
             />
           </div>
-          <select
-            value={weekday}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-                if (e.currentTarget.value) params.set("weekday", e.currentTarget.value);
-                else params.delete("weekday");
-              params.delete("filter");
-              setSearchParams(params, { replace: true });
-            }}
-            className={selectClass}
-            style={{ backgroundImage: selectArrow }}
-          >
-            {CALENDAR_WEEKDAYS.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
+          <CustomSelect options={CALENDAR_WEEKDAYS} value={weekday} onChange={() => openFilterPalette("calendar")} />
         </>
       );
     }
@@ -396,21 +394,7 @@ export default function Layout() {
               }}
             />
           </div>
-          <select
-            value={type}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-                params.set("type", e.currentTarget.value);
-              params.delete("filter");
-              setSearchParams(params, { replace: true });
-            }}
-            className={selectClass}
-            style={{ backgroundImage: selectArrow }}
-          >
-            {COLLECTION_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          <CustomSelect options={COLLECTION_TYPES} value={type} onChange={() => openFilterPalette("collections")} />
         </>
       );
     }
@@ -440,22 +424,7 @@ export default function Layout() {
               }}
             />
           </div>
-          <select
-            value={weekday}
-            onChange={(e) => {
-              const params = new URLSearchParams(searchParams);
-              if (e.currentTarget.value) params.set("weekday", e.currentTarget.value);
-              else params.delete("weekday");
-              params.delete("filter");
-              setSearchParams(params, { replace: true });
-            }}
-            className={selectClass}
-            style={{ backgroundImage: selectArrow }}
-          >
-            {NEXT_SEASON_WEEKDAYS.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
+          <CustomSelect options={NEXT_SEASON_WEEKDAYS} value={weekday} onChange={() => openFilterPalette("next-season")} />
         </>
       );
     }
@@ -463,9 +432,10 @@ export default function Layout() {
     return <h1 className="text-[13px] font-medium text-fg-secondary">设置</h1>;
   })();
 
+  const { options: paletteOptions, currentValue: paletteCurrentValue, title: paletteTitle } = getPaletteConfig(filterPaletteKind);
+
   return (
     <div className="h-screen flex text-fg overflow-hidden">
-      {/* Sidebar */}
       <aside
         className={`shrink-0 flex flex-col bg-panel border-r border-line transition-all duration-150 ease-in-out ${
           collapsed ? "w-[60px]" : "w-[196px]"
@@ -476,9 +446,7 @@ export default function Layout() {
           data-tauri-drag-region
           onMouseDown={handleHeaderMouseDown}
         >
-          <div className="w-7 h-7 shrink-0 rounded-lg bg-accent/90 flex items-center justify-center text-accent-fg text-[13px] font-bold">
-            B
-          </div>
+          <img src="/icon.png" className="w-7 h-7 shrink-0 rounded-lg" alt="" />
           {!collapsed && (
             <span className="font-semibold text-[14px] tracking-tight truncate">
               Bangumini
@@ -525,7 +493,6 @@ export default function Layout() {
         </button>
       </aside>
 
-      {/* Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <header
           className="flex items-center gap-2 h-12 px-4 border-b border-line shrink-0"
@@ -553,71 +520,49 @@ export default function Layout() {
           <KeyHint k={`${MOD}+←→`} label="翻页" />
           <KeyHint k={`${MOD}+↑↓`} label="切标签" />
           <KeyHint k="Tab" label="侧边栏" />
-          {isCollections && <KeyHint k={`${MOD}+R`} label="刷新播出时间" />}
+          {isCollections && <KeyHint k={`${MOD}+R`} label="刷新缓存" />}
         </footer>
       </div>
 
-      {/* Filter Palette Overlay */}
-      {filterPaletteOpen && (() => {
-        const options = isSearchPage ? SUBJECT_TYPES : isCollections ? COLLECTION_TYPES : isCalendar ? CALENDAR_WEEKDAYS : isNextSeason ? NEXT_SEASON_WEEKDAYS : [];
-        const currentValue = isSearchPage
-          ? searchParams.get("stype") ?? "2"
-          : isCollections
-            ? searchParams.get("type") ?? "3"
-            : isCalendar || isNextSeason
-              ? searchParams.get("weekday") ?? ""
-              : "";
-        const title = isSearchPage ? "条目类型" : isCollections ? "收藏状态" : isCalendar || isNextSeason ? "星期筛选" : "";
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setFilterPaletteOpen(false)} />
-            <div className="relative w-80 bg-elevated border border-line-strong rounded-card shadow-pop overflow-hidden">
-              <div className="px-3 py-2 text-[12px] text-fg-tertiary border-b border-line">
-                {title} · 按回车选择
-              </div>
-              <div className="p-1.5">
-                {options.map((opt, i) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => {
-                      const params = new URLSearchParams(searchParams);
-                      if (isSearchPage) {
-                        if (opt.value) params.set("stype", opt.value);
-                        else params.delete("stype");
-                      } else if (isCollections) {
-                        params.set("type", opt.value);
-                        params.delete("filter");
-                      } else if (isCalendar || isNextSeason) {
-                        if (opt.value) params.set("weekday", opt.value);
-                        else params.delete("weekday");
-                        params.delete("filter");
-                      }
-                      setSearchParams(params, { replace: true });
-                      setFilterPaletteOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-left transition-colors ${
-                      i === filterPaletteIndex
-                        ? "bg-accent text-accent-fg"
-                        : opt.value === currentValue
-                          ? "bg-accent-soft text-accent"
-                          : "text-fg-secondary hover:bg-hover"
-                    }`}
-                  >
-                    <span>{opt.label}</span>
-                    {opt.value === currentValue && (
-                      <span className="ml-auto text-[11px] opacity-70">当前</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <div className="px-3 py-2 text-[12px] text-fg-tertiary border-t border-line">
-                ↑↓ 导航 · Enter 选择 · Esc 关闭
-              </div>
+      {filterPaletteOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[25vh]">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={closeFilterPalette}
+          />
+          <div className="relative w-64 bg-elevated rounded-xl border border-line-strong shadow-pop overflow-hidden">
+            <div className="px-4 pt-3 pb-2">
+              <span className="text-[12px] font-semibold text-fg">{paletteTitle}</span>
+            </div>
+            <div className="px-2 pb-1">
+              {paletteOptions.map((opt, i) => (
+                <button
+                  key={opt.value}
+                  onClick={() => {
+                    applyPaletteValue(filterPaletteKind, opt.value);
+                    closeFilterPalette();
+                  }}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] text-left transition-colors ${
+                    i === filterPaletteIndex
+                      ? "bg-accent text-accent-fg"
+                      : "text-fg-secondary hover:bg-hover"
+                  }`}
+                >
+                  {opt.value === paletteCurrentValue && (
+                    <span className={`w-3.5 text-center text-[11px] ${i === filterPaletteIndex ? "text-accent-fg" : "text-accent"}`}>●</span>
+                  )}
+                  {opt.value !== paletteCurrentValue && <span className="w-3.5" />}
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+            <div className="px-3 py-1.5 text-[11px] text-fg-tertiary border-t border-line/50">
+              ↑↓ 导航 · Enter 选择 · Esc 关闭
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }

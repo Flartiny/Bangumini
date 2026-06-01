@@ -86,6 +86,7 @@ export default function SubjectDetailPage() {
   const mainEps = sorted.filter((e) => e.type === 0);
   const totalEp = mainEps.length > 0 ? mainEps.length : (subject?.total_episodes ?? 0);
   const currentEp = collection?.ep_status ?? 0;
+  const currentColType = collection?.type;
   const displayTarget = targetEp ?? currentEp;
   const isDirty = targetEp !== null && targetEp !== currentEp;
 
@@ -219,8 +220,9 @@ export default function SubjectDetailPage() {
       // Ctrl+K: command palette
       if (e.key === "k" && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
+        const idx = COLLECTION_OPTIONS.findIndex((o) => o.type === (currentColType ?? 3));
         setPaletteOpen((prev) => !prev);
-        setPaletteIndex(0);
+        setPaletteIndex(idx >= 0 ? idx : 2); // default to "在看" (index 2)
         return;
       }
 
@@ -319,7 +321,7 @@ export default function SubjectDetailPage() {
     }
     window.addEventListener("keydown", handleKeyDown, true); // Use capture phase
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [paletteOpen, paletteIndex, totalEp, currentEp, targetEp, isDirty, handleBack, subject, confirmDialog]);
+  }, [paletteOpen, paletteIndex, totalEp, currentEp, targetEp, isDirty, handleBack, subject, confirmDialog, currentColType]);
 
   const staffMap = new Map<string, string[]>();
   (persons ?? []).forEach((p) => {
@@ -496,34 +498,33 @@ export default function SubjectDetailPage() {
 
       {/* Command Palette Overlay */}
       {paletteOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setPaletteOpen(false)} />
-          <div className="relative w-80 bg-elevated border border-line-strong rounded-card shadow-pop overflow-hidden">
-            <div className="px-3 py-2 text-[12px] text-fg-tertiary border-b border-line">
-              收藏状态 · 按数字键或回车选择
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-[25vh]">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setPaletteOpen(false)} />
+          <div className="relative w-64 bg-elevated rounded-xl border border-line-strong shadow-pop overflow-hidden">
+            <div className="px-4 pt-3 pb-2">
+              <span className="text-[12px] font-semibold text-fg">收藏状态</span>
             </div>
-            <div className="p-1.5">
+            <div className="px-2 pb-1">
               {COLLECTION_OPTIONS.map((opt, i) => (
                 <button
                   key={opt.type}
                   onClick={() => setCollectionType(opt.type)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-[13px] text-left transition-colors ${
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] text-left transition-colors ${
                     i === paletteIndex
                       ? "bg-accent text-accent-fg"
-                      : collection?.type === opt.type
-                        ? "bg-accent-soft text-accent"
-                        : "text-fg-secondary hover:bg-hover"
+                      : "text-fg-secondary hover:bg-hover"
                   }`}
                 >
-                  <kbd className={`text-[11px] w-4 ${i === paletteIndex ? "text-accent-fg/70" : "text-fg-tertiary"}`}>{opt.key}</kbd>
-                  <span>{opt.label}</span>
+                  <kbd className={`text-[11px] w-4 text-center ${i === paletteIndex ? "text-accent-fg/70" : "text-fg-tertiary"}`}>{opt.key}</kbd>
                   {collection?.type === opt.type && (
-                    <span className="ml-auto text-[11px] opacity-70">当前</span>
+                    <span className={`text-[11px] ${i === paletteIndex ? "text-accent-fg" : "text-accent"}`}>●</span>
                   )}
+                  {collection?.type !== opt.type && <span className="w-3.5" />}
+                  <span>{opt.label}</span>
                 </button>
               ))}
             </div>
-            <div className="px-3 py-2 text-[12px] text-fg-tertiary border-t border-line">
+            <div className="px-3 py-1.5 text-[11px] text-fg-tertiary border-t border-line/50">
               ↑↓ 导航 · Enter/数字键 选择 · Esc 关闭
             </div>
           </div>
@@ -533,24 +534,24 @@ export default function SubjectDetailPage() {
       {/* Confirm Dialog */}
       {confirmDialog && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[30vh]">
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDialog(null)} />
-          <div className="relative w-80 bg-elevated border border-line-strong rounded-card shadow-pop overflow-hidden">
-            <div className="px-4 py-3 text-[13px] font-semibold text-fg">
-              {confirmDialog.title}
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmDialog(null)} />
+          <div className="relative w-72 bg-elevated rounded-xl border border-line-strong shadow-pop overflow-hidden">
+            <div className="px-4 pt-3 pb-1">
+              <span className="text-[13px] font-semibold text-fg">{confirmDialog.title}</span>
             </div>
-            <div className="px-4 pb-1 text-[13px] text-fg-secondary">
+            <div className="px-4 pb-3 text-[13px] text-fg-secondary">
               {confirmDialog.message}
             </div>
-            <div className="flex gap-2 p-3 pt-3">
+            <div className="flex gap-2 px-4 pb-3">
               <button
                 onClick={() => setConfirmDialog(null)}
-                className="flex-1 px-3 py-2 text-[13px] bg-hover text-fg-secondary rounded-md hover:text-fg transition-colors"
+                className="flex-1 px-3 py-1.5 text-[13px] rounded-md text-fg-secondary hover:bg-hover transition-colors"
               >
                 取消
               </button>
               <button
                 onClick={confirmDialog.onConfirm}
-                className="flex-1 px-3 py-2 text-[13px] font-medium bg-accent text-accent-fg rounded-md hover:opacity-90 transition-opacity"
+                className="flex-1 px-3 py-1.5 text-[13px] font-medium bg-accent text-accent-fg rounded-md hover:opacity-90 transition-opacity"
               >
                 {confirmDialog.confirmLabel}
               </button>

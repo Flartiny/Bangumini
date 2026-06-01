@@ -291,6 +291,11 @@ export default function CollectionsPage() {
   }, [paged.length, page]);
 
   useEffect(() => {
+    setPage(1);
+    setFocusedIndex(0);
+  }, [collectionType, searchText]);
+
+  useEffect(() => {
     if (page !== restoredPageState.page || focusedIndex !== restoredPageState.focusedIndex) {
       writePageState(collectionType, searchText, page, focusedIndex);
     }
