@@ -427,7 +427,8 @@ export default function CollectionsPage() {
                 title={s.name_cn || s.name}
                 subtitle={s.name_cn ? s.name : undefined}
                 selected={index === focusedIndex}
-                onClick={() => openSubject(s.id)}
+                onClick={() => setFocusedIndex(index)}
+                onDoubleClick={() => openSubject(s.id)}
                 accessories={
                   <>
                     {label && <Tag>{label}</Tag>}

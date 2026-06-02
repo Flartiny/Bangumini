@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
   getSubject,
@@ -12,9 +12,33 @@ import {
   postUserCollection,
 } from "@shared/api/client";
 import { CollectionTypeLabel } from "@shared/api/types";
-import type { CollectionType } from "@shared/api/types";
+import type { CollectionType, UserCollection } from "@shared/api/types";
+import type { QueryClient } from "@tanstack/react-query";
+
+function syncCollectionsCache(queryClient: QueryClient, subjectId: number) {
+  const collection = queryClient.getQueryData<UserCollection>(["collection", subjectId]);
+  if (!collection) return;
+
+  queryClient.setQueriesData<{ data: UserCollection[]; total?: number }>(
+    { queryKey: ["collections"], exact: false },
+    (old) => {
+      if (!old?.data) return old;
+      const idx = old.data.findIndex((item) => item.subject_id === subjectId);
+      if (idx >= 0) {
+        const next = [...old.data];
+        next[idx] = collection;
+        return { ...old, data: next };
+      }
+      return {
+        ...old,
+        total: (old.total ?? old.data.length) + 1,
+        data: [collection, ...old.data],
+      };
+    },
+  );
+}
 import { getUsername } from "../api/oauth";
-import { ChevronLeftIcon, ExternalIcon } from "../components/icons";
+import { ChevronLeftIcon } from "../components/icons";
 import { MOD } from "../api/shortcut";
 
 const COLLECTION_OPTIONS: { type: CollectionType; label: string; key: string }[] = [
@@ -37,6 +61,7 @@ export default function SubjectDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const subjectId = Number(id);
+  const queryClient = useQueryClient();
   const [targetEp, setTargetEp] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -142,6 +167,7 @@ export default function SubjectDetailPage() {
         await patchSubjectEpisodes(subjectId, { episode_id: ids, type: targetEp > currentEp ? 2 : 0 });
       }
       await refetchCollection();
+      syncCollectionsCache(queryClient, subjectId);
       setTargetEp(null);
     } catch {
       // If API says "need to add subject", retry with ensureWatching
@@ -159,7 +185,9 @@ export default function SubjectDetailPage() {
         onConfirm: () => {
           setConfirmDialog(null);
           postUserCollection(subjectId, { type: 2 })
-            .then(() => refetchCollection());
+            .then(() => {
+              refetchCollection().then(() => syncCollectionsCache(queryClient, subjectId));
+            });
         },
       });
     }
@@ -170,7 +198,7 @@ export default function SubjectDetailPage() {
     setPaletteOpen(false);
     try {
       await postUserCollection(subjectId, { type });
-      refetchCollection();
+      refetchCollection().then(() => syncCollectionsCache(queryClient, subjectId));
     } finally {
       setLoading(false);
     }
@@ -345,17 +373,7 @@ export default function SubjectDetailPage() {
         <span className="text-[13px] font-medium truncate">
           {subject?.name_cn || subject?.name || "条目详情"}
         </span>
-        {loading && <span className="text-[12px] text-fg-tertiary animate-pulse">保存中…</span>}
-        <button
-          onClick={async () => {
-            const { openUrl } = await import("@tauri-apps/plugin-opener");
-            openUrl(`https://bgm.tv/subject/${subjectId}`);
-          }}
-          className="flex items-center gap-1 px-2 py-1 rounded-md text-[12px] text-fg-secondary hover:bg-hover hover:text-fg transition-colors"
-        >
-          Bangumi
-          <ExternalIcon size={13} />
-        </button>
+        {loading && <span className="text-[12px] text-fg-tertiary animate-pulse ml-auto">保存中…</span>}
       </header>
 
       {/* Two-column body */}

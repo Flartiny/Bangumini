@@ -31,12 +31,13 @@ interface Props {
   subtitle?: string;
   selected?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
   accessories?: ReactNode;
   size?: "sm" | "md";
 }
 
 export const SubjectRow = forwardRef<HTMLDivElement, Props>(function SubjectRow(
-  { coverUrl, title, subtitle, selected, onClick, accessories, size = "sm" },
+  { coverUrl, title, subtitle, selected, onClick, onDoubleClick, accessories, size = "sm" },
   ref,
 ) {
   const cover = size === "md" ? "w-12 h-16" : "w-10 h-14";
@@ -44,6 +45,7 @@ export const SubjectRow = forwardRef<HTMLDivElement, Props>(function SubjectRow(
     <div
       ref={ref}
       onClick={onClick}
+      onDoubleClick={onDoubleClick}
       className={`flex items-center gap-3 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
         selected ? "bg-selected" : "hover:bg-hover"
       }`}

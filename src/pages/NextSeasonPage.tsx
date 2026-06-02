@@ -371,7 +371,8 @@ export default function NextSeasonPage() {
                           title={displayName}
                           subtitle={subtitle}
                           selected={idx === focusedIndex}
-                          onClick={() => {
+                          onClick={() => setFocusedIndex(idx)}
+                          onDoubleClick={() => {
                             if (item.bangumiId) {
                               navigate(`/subject/${item.bangumiId}`);
                             } else {
@@ -425,7 +426,8 @@ export default function NextSeasonPage() {
                   title={displayName}
                   subtitle={subtitle}
                   selected={index === focusedIndex}
-                  onClick={() => {
+                  onClick={() => setFocusedIndex(index)}
+                  onDoubleClick={() => {
                     if (item.bangumiId) {
                       navigate(`/subject/${item.bangumiId}`);
                     } else {

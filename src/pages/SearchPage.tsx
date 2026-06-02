@@ -109,7 +109,8 @@ export default function SearchPage() {
           title={s.name_cn || s.name}
           subtitle={s.name_cn ? s.name : undefined}
           selected={i === focusedIndex}
-          onClick={() => navigate(`/subject/${s.id}`)}
+          onClick={() => setFocusedIndex(i)}
+          onDoubleClick={() => navigate(`/subject/${s.id}`)}
           accessories={
             <>
               <Meta>{SubjectTypeLabel[s.type]}</Meta>

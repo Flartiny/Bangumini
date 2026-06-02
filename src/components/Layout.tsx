@@ -13,6 +13,7 @@ import {
 } from "./icons";
 import { MOD } from "../api/shortcut";
 import CustomSelect from "./CustomSelect";
+import FetchIndicator from "./FetchIndicator";
 
 const TABS = [
   { path: "/collections", label: "收藏", key: "1", Icon: BookmarkIcon },
@@ -501,6 +502,7 @@ export default function Layout() {
           onDoubleClick={(e) => e.preventDefault()}
         >
           {filterBar}
+          <FetchIndicator />
         </header>
 
         <main className="flex-1 overflow-auto">

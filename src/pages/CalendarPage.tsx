@@ -198,7 +198,8 @@ export default function CalendarPage() {
                             title={s.name_cn || s.name}
                             subtitle={s.name_cn && s.name ? s.name : undefined}
                             selected={idx === focusedIndex}
-                            onClick={() => navigate(`/subject/${s.id}`)}
+                            onClick={() => setFocusedIndex(idx)}
+                            onDoubleClick={() => navigate(`/subject/${s.id}`)}
                             accessories={
                               <>
                                 {s.rating?.score ? <Rating score={s.rating.score} /> : null}
@@ -252,7 +253,8 @@ export default function CalendarPage() {
                     title={s.name_cn || s.name}
                     subtitle={s.name_cn && s.name ? s.name : undefined}
                     selected={index === focusedIndex}
-                    onClick={() => navigate(`/subject/${s.id}`)}
+                    onClick={() => setFocusedIndex(index)}
+                    onDoubleClick={() => navigate(`/subject/${s.id}`)}
                     accessories={
                       <>
                         {s.rating?.score ? <Rating score={s.rating.score} /> : null}
