@@ -20,6 +20,7 @@
         "maximizable": false,
         "decorations": false,
         "skipTaskbar": true,
+        "visible": false,
         "transparent": true,
         "shadow": true,
         "windowEffects": {

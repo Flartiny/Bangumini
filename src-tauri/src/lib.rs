@@ -329,6 +329,12 @@ pub fn run() {
 
             let window = app.get_webview_window("main").unwrap();
 
+            // Only show window on manual launch, not on auto-start
+            let is_autostart = std::env::args().any(|arg| arg == "--autostart");
+            if !is_autostart {
+                show_window(&window, &show_guard);
+            }
+
             // --- Disable Alt+Space system menu on Windows ---
             #[cfg(windows)]
             {
