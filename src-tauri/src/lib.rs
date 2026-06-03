@@ -298,6 +298,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             fetch_proxy,
             start_oauth,
@@ -328,6 +329,9 @@ pub fn run() {
             });
 
             let window = app.get_webview_window("main").unwrap();
+
+            // Register updater plugin
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Only show window on manual launch, not on auto-start
             let is_autostart = std::env::args().any(|arg| arg == "--autostart");
@@ -421,6 +425,18 @@ pub fn run() {
                         let _ = w_events.hide();
                     }
                     _ => {}
+                }
+            });
+
+            // Background update check on startup
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                use tauri::Emitter;
+                use tauri_plugin_updater::UpdaterExt;
+                if let Ok(updater) = handle.updater() {
+                    if let Ok(Some(update)) = updater.check().await {
+                        let _ = handle.emit("update-available", update.version);
+                    }
                 }
             });
 

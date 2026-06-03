@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { clearToken, setToken } from "../api/oauth";
 import ShortcutRecorder from "../components/ShortcutRecorder";
 
@@ -7,13 +10,67 @@ export default function SettingsPage() {
   const [tokenText, setTokenText] = useState("");
   const [autostart, setAutostart] = useState(false);
   const [autostartLoading, setAutostartLoading] = useState(true);
+  const [currentVersion, setCurrentVersion] = useState("");
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error">("idle");
+  const [latestVersion, setLatestVersion] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const updateRef = useRef<Awaited<ReturnType<typeof check>>>(null);
 
   useEffect(() => {
     invoke<boolean>("get_autostart")
       .then(setAutostart)
       .catch(() => setAutostart(false))
       .finally(() => setAutostartLoading(false));
+    getVersion().then(setCurrentVersion).catch(() => {});
   }, []);
+
+  const handleCheckUpdate = async () => {
+    setUpdateStatus("checking");
+    try {
+      const update = await check();
+      updateRef.current = update;
+      if (update) {
+        setLatestVersion(update.version);
+        setUpdateStatus("available");
+      } else {
+        setUpdateStatus("up-to-date");
+      }
+    } catch {
+      setUpdateStatus("error");
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    setUpdateStatus("downloading");
+    try {
+      const update = updateRef.current;
+      if (update) {
+        let total = 0;
+        await update.downloadAndInstall((event) => {
+          switch (event.event) {
+            case "Started":
+              total = event.data?.contentLength ?? 0;
+              break;
+            case "Progress":
+              setDownloadProgress((prev) => {
+                const next = prev + ((event.data?.chunkLength ?? 0) / total) * 100;
+                return Math.round(next);
+              });
+              break;
+            case "Finished":
+              setUpdateStatus("ready");
+              break;
+          }
+        });
+      }
+    } catch {
+      setUpdateStatus("error");
+    }
+  };
+
+  const handleRestart = async () => {
+    await relaunch();
+  };
 
   const toggleAutostart = async () => {
     const next = !autostart;
@@ -81,6 +138,59 @@ export default function SettingsPage() {
             />
           </button>
         </div>
+      </section>
+
+      <section>
+        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">版本更新</h3>
+        <p className="text-[13px] text-fg-secondary mb-3">
+          当前版本 {currentVersion || "—"}
+          {updateStatus === "up-to-date" && <span className="text-success ml-2">已是最新</span>}
+          {updateStatus === "available" && <span className="text-accent ml-2">发现新版本 {latestVersion}</span>}
+        </p>
+        {updateStatus === "idle" && (
+          <button onClick={handleCheckUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-accent text-accent-fg rounded-md hover:opacity-90 transition-opacity">
+            检查更新
+          </button>
+        )}
+        {updateStatus === "checking" && (
+          <span className="text-[13px] text-fg-tertiary animate-pulse">正在检查…</span>
+        )}
+        {updateStatus === "up-to-date" && (
+          <button onClick={handleCheckUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-elevated text-fg-secondary rounded-md border border-line hover:bg-hover transition-colors">
+            重新检查
+          </button>
+        )}
+        {updateStatus === "available" && (
+          <div className="flex gap-2">
+            <button onClick={handleDownloadUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-accent text-accent-fg rounded-md hover:opacity-90 transition-opacity">
+              下载更新
+            </button>
+            <button onClick={handleCheckUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-elevated text-fg-secondary rounded-md border border-line hover:bg-hover transition-colors">
+              重新检查
+            </button>
+          </div>
+        )}
+        {updateStatus === "downloading" && (
+          <div className="space-y-2">
+            <span className="text-[13px] text-fg-secondary">下载中 {downloadProgress}%</span>
+            <div className="h-1.5 w-48 rounded-full bg-elevated overflow-hidden">
+              <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${downloadProgress}%` }} />
+            </div>
+          </div>
+        )}
+        {updateStatus === "ready" && (
+          <button onClick={handleRestart} className="px-4 py-1.5 text-[13px] font-medium bg-success text-success-fg rounded-md hover:opacity-90 transition-opacity">
+            安装并重启
+          </button>
+        )}
+        {updateStatus === "error" && (
+          <div className="space-y-2">
+            <span className="text-[13px] text-danger">检查更新失败</span>
+            <button onClick={handleCheckUpdate} className="block px-4 py-1.5 text-[13px] font-medium bg-elevated text-fg-secondary rounded-md border border-line hover:bg-hover transition-colors">
+              重试
+            </button>
+          </div>
+        )}
       </section>
 
       <div className="pt-2 border-t border-line">
