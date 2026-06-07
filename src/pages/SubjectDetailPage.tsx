@@ -14,6 +14,23 @@ import {
 import { CollectionTypeLabel } from "@shared/api/types";
 import type { CollectionType, UserCollection } from "@shared/api/types";
 import type { QueryClient } from "@tanstack/react-query";
+import {
+  deleteCachedCollection,
+  readCachedCharacters,
+  readCachedCollection,
+  readCachedEpisodes,
+  readCachedPersons,
+  readCachedSubject,
+  writeCachedCharacters,
+  writeCachedCollection,
+  writeCachedEpisodes,
+  writeCachedPersons,
+  writeCachedSubject,
+} from "@shared/storage/sqlite-cache";
+
+function isNotFoundError(error: unknown) {
+  return error instanceof Error && error.message.includes("Bangumi API error 404");
+}
 
 function syncCollectionsCache(queryClient: QueryClient, subjectId: number) {
   const collection = queryClient.getQueryData<UserCollection>(["collection", subjectId]);
@@ -70,39 +87,110 @@ export default function SubjectDetailPage() {
   const initialEpStatus = useRef<number | null>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    if (!Number.isFinite(subjectId)) return;
+
+    let cancelled = false;
+
+    async function hydrateFromCache() {
+      const uname = getUsername();
+      const [
+        cachedSubject,
+        cachedPersons,
+        cachedCharacters,
+        cachedEpisodes,
+        cachedCollection,
+      ] = await Promise.all([
+        readCachedSubject(subjectId),
+        readCachedPersons(subjectId),
+        readCachedCharacters(subjectId),
+        readCachedEpisodes(subjectId),
+        readCachedCollection(uname, subjectId),
+      ]);
+
+      if (cancelled) return;
+
+      if (cachedSubject && !queryClient.getQueryData(["subject", subjectId])) {
+        queryClient.setQueryData(["subject", subjectId], cachedSubject);
+      }
+      if (cachedPersons && !queryClient.getQueryData(["persons", subjectId])) {
+        queryClient.setQueryData(["persons", subjectId], cachedPersons);
+      }
+      if (cachedCharacters && !queryClient.getQueryData(["characters", subjectId])) {
+        queryClient.setQueryData(["characters", subjectId], cachedCharacters);
+      }
+      if (cachedEpisodes && !queryClient.getQueryData(["episodes", subjectId])) {
+        queryClient.setQueryData(["episodes", subjectId], cachedEpisodes);
+      }
+      if (cachedCollection && !queryClient.getQueryData(["collection", subjectId])) {
+        queryClient.setQueryData(["collection", subjectId], cachedCollection);
+        if (initialEpStatus.current === null) {
+          initialEpStatus.current = cachedCollection.ep_status;
+        }
+      }
+    }
+
+    void hydrateFromCache();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient, subjectId]);
+
   const { data: subject } = useQuery({
     queryKey: ["subject", subjectId],
-    queryFn: () => getSubject(subjectId),
+    queryFn: async () => {
+      const result = await getSubject(subjectId);
+      await writeCachedSubject(result);
+      return result;
+    },
   });
 
   const { data: persons } = useQuery({
     queryKey: ["persons", subjectId],
-    queryFn: () => getSubjectPersons(subjectId),
+    queryFn: async () => {
+      const result = await getSubjectPersons(subjectId);
+      await writeCachedPersons(subjectId, result);
+      return result;
+    },
   });
 
   const { data: characters } = useQuery({
     queryKey: ["characters", subjectId],
-    queryFn: () => getSubjectCharacters(subjectId),
+    queryFn: async () => {
+      const result = await getSubjectCharacters(subjectId);
+      await writeCachedCharacters(subjectId, result);
+      return result;
+    },
   });
 
   const { data: episodeData } = useQuery({
     queryKey: ["episodes", subjectId],
-    queryFn: () => getEpisodes(subjectId),
+    queryFn: async () => {
+      const result = await getEpisodes(subjectId);
+      await writeCachedEpisodes(subjectId, result);
+      return result;
+    },
   });
 
   const { data: collection, refetch: refetchCollection } = useQuery({
     queryKey: ["collection", subjectId],
     queryFn: async () => {
+      const uname = getUsername();
+      if (!uname) return null;
       try {
-        const uname = getUsername();
-        if (!uname) return null;
         const result = await getUserCollection(uname, subjectId);
         if (initialEpStatus.current === null && result) {
           initialEpStatus.current = result.ep_status;
         }
+        await writeCachedCollection(uname, result);
         return result;
-      } catch {
-        return null;
+      } catch (error) {
+        if (isNotFoundError(error)) {
+          await deleteCachedCollection(uname, subjectId);
+          return null;
+        }
+        return readCachedCollection(uname, subjectId);
       }
     },
   });

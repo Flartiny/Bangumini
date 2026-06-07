@@ -1,11 +1,16 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getNextSeason, getNextSeasonInfo } from "@shared/api/anilist";
 import type { NextSeasonItem } from "@shared/api/anilist";
 import { searchAnimeSubject } from "@shared/api/client";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
+import {
+  deleteCachedValuesByPrefixExcept,
+  readCachedValueWithLegacy,
+  writeCachedValue,
+} from "@shared/storage/sqlite-cache";
 import { SubjectRow, Meta } from "../components/SubjectRow";
 
 const ANILIST_WEEKDAY_CN: Record<number, string> = {
@@ -41,7 +46,8 @@ function formatDate(item: NextSeasonItem, seasonLabel: string): string {
   return seasonLabel;
 }
 
-const NEXT_SEASON_CACHE_PREFIX = "bangumini-next-season-";
+const NEXT_SEASON_CACHE_PREFIX = "next-season-";
+const LEGACY_NEXT_SEASON_CACHE_PREFIX = "bangumini-next-season-";
 const NEXT_SEASON_CACHE_TTL = 1000 * 60 * 60 * 24; // 1 day
 
 function getNextSeasonCacheKey(): string {
@@ -49,32 +55,20 @@ function getNextSeasonCacheKey(): string {
   return `${NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
 }
 
-function readNextSeasonCache(): SeasonEntry[] | null {
+function getLegacyNextSeasonCacheKey(): string {
+  const { season, seasonYear } = getNextSeasonInfo();
+  return `${LEGACY_NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
+}
+
+function readLegacyNextSeasonCache(): SeasonEntry[] | null {
   try {
-    const raw = localStorage.getItem(getNextSeasonCacheKey());
+    const raw = localStorage.getItem(getLegacyNextSeasonCacheKey());
     if (!raw) return null;
     const cached = JSON.parse(raw) as { entries: SeasonEntry[]; cachedAt: number };
     if (!cached.entries || !cached.cachedAt) return null;
     return cached.entries;
   } catch {
     return null;
-  }
-}
-
-function writeNextSeasonCache(entries: SeasonEntry[]) {
-  localStorage.setItem(
-    getNextSeasonCacheKey(),
-    JSON.stringify({ entries, cachedAt: Date.now() }),
-  );
-}
-
-function cleanOldNextSeasonCaches() {
-  const currentKey = getNextSeasonCacheKey();
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(NEXT_SEASON_CACHE_PREFIX) && key !== currentKey) {
-      localStorage.removeItem(key);
-    }
   }
 }
 
@@ -113,6 +107,7 @@ function earliestEntryDay(entries: SeasonEntry[]): number | "tba" {
 
 export default function NextSeasonPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const filterText = searchParams.get("filter") ?? "";
   const filterWeekday = searchParams.get("weekday") ?? "";
@@ -121,11 +116,28 @@ export default function NextSeasonPage() {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const isFiltering = filterText !== "" || filterWeekday !== "";
+  const nextSeasonCacheKey = getNextSeasonCacheKey();
 
-  const seedCache = useMemo(() => {
-    cleanOldNextSeasonCaches();
-    return readNextSeasonCache() ?? [];
-  }, []);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateNextSeason() {
+      await deleteCachedValuesByPrefixExcept(NEXT_SEASON_CACHE_PREFIX, nextSeasonCacheKey);
+      const cached = await readCachedValueWithLegacy<SeasonEntry[]>(
+        nextSeasonCacheKey,
+        readLegacyNextSeasonCache,
+      );
+      if (!cancelled && cached && !queryClient.getQueryData(["next-season", seasonLabel])) {
+        queryClient.setQueryData(["next-season", seasonLabel], cached);
+      }
+    }
+
+    void hydrateNextSeason();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nextSeasonCacheKey, queryClient, seasonLabel]);
 
   const { data: rawEntries, isLoading, error } = useQuery({
     queryKey: ["next-season", seasonLabel],
@@ -150,11 +162,9 @@ export default function NextSeasonPage() {
         .map((r) => r.value)
         .filter((e) => !isAired(e));
 
-      writeNextSeasonCache(enriched);
+      await writeCachedValue(nextSeasonCacheKey, enriched);
       return enriched;
     },
-    initialData: seedCache.length > 0 ? seedCache : undefined,
-    initialDataUpdatedAt: 0,
     staleTime: NEXT_SEASON_CACHE_TTL,
   });
 
@@ -184,6 +194,7 @@ export default function NextSeasonPage() {
   // Default to day of earliest entry
   useEffect(() => {
     if (entries.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentDay(earliestEntryDay(entries));
   }, [entries.length]);
 
@@ -191,7 +202,7 @@ export default function NextSeasonPage() {
   const filteredGroups = useMemo(() => {
     if (!isFiltering) return [];
     const lower = filterText.toLowerCase();
-    let items = entries.filter((item) => {
+    const items = entries.filter((item) => {
       if (filterWeekday === "nontv") return item.format !== "TV";
       if (filterWeekday && String(item.weekday ?? "tba") !== filterWeekday) return false;
       if (filterText) {
@@ -233,6 +244,7 @@ export default function NextSeasonPage() {
 
   // Reset focus when day or filter changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFocusedIndex(0);
   }, [currentDay, filterText, filterWeekday]);
 

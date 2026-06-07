@@ -98,7 +98,10 @@ export default function Layout() {
   const isFetching = useIsFetching() > 0;
   const currentTab = TABS.findIndex((t) => t.path === location.pathname);
   const currentTabRef = useRef(currentTab);
-  currentTabRef.current = currentTab;
+
+  useEffect(() => {
+    currentTabRef.current = currentTab;
+  }, [currentTab]);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");

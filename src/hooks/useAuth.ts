@@ -1,15 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { isLoggedIn } from "../api/oauth";
 
 export function useAuth() {
-  const [authLoading, setAuthLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
-
-  useEffect(() => {
-    const ok = isLoggedIn();
-    setAuthenticated(ok);
-    setAuthLoading(false);
-  }, []);
+  const [authenticated, setAuthenticated] = useState(() => isLoggedIn());
 
   function handleLogin() {
     const ok = isLoggedIn();
@@ -17,5 +10,5 @@ export function useAuth() {
     return ok;
   }
 
-  return { authLoading, authenticated, handleLogin };
+  return { authLoading: false, authenticated, handleLogin };
 }

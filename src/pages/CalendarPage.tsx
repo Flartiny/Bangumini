@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getCalendar } from "@shared/api/client";
 import type { CalendarItem } from "@shared/api/types";
-import { readCache, writeCache } from "@shared/local-cache";
+import {
+  readCachedValueWithLegacy,
+  readLegacyHttpCache,
+  writeCachedValue,
+} from "@shared/storage/sqlite-cache";
 import { WEEKDAY_CN, getTodayBangumiWeekday } from "@shared/sort-collections";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import type { SubjectSmall } from "@shared/api/types";
@@ -13,6 +17,7 @@ import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
 export default function CalendarPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const today = getTodayBangumiWeekday();
   const [currentDay, setCurrentDay] = useState<number>(today);
   const [focusedIndex, setFocusedIndex] = useState(0);
@@ -22,17 +27,33 @@ export default function CalendarPage() {
   const filterWeekday = searchParams.get("weekday") ?? "";
   const isFiltering = filterText !== "" || filterWeekday !== "";
 
-  const seedCalendar = useMemo(() => readCache<CalendarItem[]>("calendar"), []);
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateCalendar() {
+      const cached = await readCachedValueWithLegacy<CalendarItem[]>(
+        "calendar",
+        () => readLegacyHttpCache<CalendarItem[]>("calendar"),
+      );
+      if (!cancelled && cached && !queryClient.getQueryData(["calendar"])) {
+        queryClient.setQueryData(["calendar"], cached);
+      }
+    }
+
+    void hydrateCalendar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [queryClient]);
 
   const { data: calendar, isLoading, error } = useQuery({
     queryKey: ["calendar"],
     queryFn: async () => {
       const data = await getCalendar();
-      writeCache("calendar", data);
+      await writeCachedValue("calendar", data);
       return data;
     },
-    initialData: seedCalendar ?? undefined,
-    initialDataUpdatedAt: 0,
     staleTime: 1000 * 60 * 60 * 24,
   });
 
@@ -78,6 +99,7 @@ export default function CalendarPage() {
 
   // Reset focus when items change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFocusedIndex(0);
     itemRefs.current = [];
   }, [currentDay, filterText, filterWeekday]);

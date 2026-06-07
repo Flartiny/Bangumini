@@ -13,12 +13,18 @@ import {
   WEEKDAY_CN,
 } from "@shared/sort-collections";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
-import { readCache, writeCache } from "@shared/local-cache";
+import {
+  deleteCachedValuesByPrefix,
+  readCachedValueWithLegacy,
+  readLegacyHttpCache,
+  writeCachedValue,
+} from "@shared/storage/sqlite-cache";
 import { getUsername } from "../api/oauth";
 import { SubjectRow, Rating, Meta, Tag } from "../components/SubjectRow";
 
 const LIMIT = 20;
-const AIRING_CACHE_PREFIX = "bangumini-anilist-";
+const COLLECTIONS_CACHE_PREFIX = "collections-";
+const AIRING_CACHE_PREFIX = "anilist-airing-";
 const AIRING_REQUEST_DELAY = 700;
 
 type AiringTime = { airingAt: number; episode: number };
@@ -54,9 +60,9 @@ function writePageState(collectionType: string, searchText: string, page: number
   );
 }
 
-function readAiringCache(subjectId: number): AiringTime | null {
+function readLegacyAiringCache(subjectId: number): AiringTime | null {
   try {
-    const raw = localStorage.getItem(`${AIRING_CACHE_PREFIX}${subjectId}`);
+    const raw = localStorage.getItem(`bangumini-anilist-${subjectId}`);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // new format: { airingAt, episode }
@@ -67,13 +73,6 @@ function readAiringCache(subjectId: number): AiringTime | null {
   } catch {
     return null;
   }
-}
-
-function writeAiringCache(subjectId: number, value: AiringTime) {
-  localStorage.setItem(
-    `${AIRING_CACHE_PREFIX}${subjectId}`,
-    JSON.stringify(value),
-  );
 }
 
 function delay(ms: number) {
@@ -120,10 +119,7 @@ export default function CollectionsPage() {
   useEffect(() => {
     const state = location.state as CollectionsLocationState | null;
     if (state?.fromSubject && state?.subjectId) {
-      for (let i = localStorage.length - 1; i >= 0; i--) {
-        const key = localStorage.key(i);
-        if (key?.startsWith("bangumini-http-collections-")) localStorage.removeItem(key);
-      }
+      void deleteCachedValuesByPrefix(COLLECTIONS_CACHE_PREFIX);
       queryClient.invalidateQueries({ queryKey: ["collections"] });
       window.history.replaceState({}, document.title);
       // Reset the flag after other effects have run
@@ -131,10 +127,29 @@ export default function CollectionsPage() {
     }
   }, [location, queryClient]);
 
-  const seedCollections = useMemo(
-    () => readCache<PagedResponse<UserCollection>>(`collections-${collectionType}-${uname}`),
-    [collectionType, uname],
-  );
+  const collectionsCacheKey = `${COLLECTIONS_CACHE_PREFIX}${collectionType}-${uname}`;
+
+  useEffect(() => {
+    if (!uname) return;
+
+    let cancelled = false;
+
+    async function hydrateCollections() {
+      const cached = await readCachedValueWithLegacy<PagedResponse<UserCollection>>(
+        collectionsCacheKey,
+        () => readLegacyHttpCache<PagedResponse<UserCollection>>(`collections-${collectionType}-${uname}`),
+      );
+      if (!cancelled && cached && !queryClient.getQueryData(["collections", collectionType, uname])) {
+        queryClient.setQueryData(["collections", collectionType, uname], cached);
+      }
+    }
+
+    void hydrateCollections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionType, collectionsCacheKey, queryClient, uname]);
 
   const { data: collData, isLoading, error } = useQuery({
     queryKey: ["collections", collectionType, uname],
@@ -146,27 +161,43 @@ export default function CollectionsPage() {
       } else {
         result = await getUserCollections({ username: uname, type: parseInt(collectionType), limit: 100 });
       }
-      writeCache(`collections-${collectionType}-${uname}`, result);
+      await writeCachedValue(collectionsCacheKey, result);
       return result;
     },
     enabled: !!uname,
-    initialData: seedCollections ?? undefined,
-    initialDataUpdatedAt: 0,
     staleTime: 1000 * 60 * 60 * 24,
   });
 
-  const seedCalendar = useMemo(() => readCache<CalendarItem[]>("calendar"), []);
+  useEffect(() => {
+    if (!isWatching) return;
+
+    let cancelled = false;
+
+    async function hydrateCalendar() {
+      const cached = await readCachedValueWithLegacy<CalendarItem[]>(
+        "calendar",
+        () => readLegacyHttpCache<CalendarItem[]>("calendar"),
+      );
+      if (!cancelled && cached && !queryClient.getQueryData(["calendar"])) {
+        queryClient.setQueryData(["calendar"], cached);
+      }
+    }
+
+    void hydrateCalendar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isWatching, queryClient]);
 
   const { data: calendar, error: calError } = useQuery({
     queryKey: ["calendar"],
     queryFn: async () => {
       const data = await getCalendar();
-      writeCache("calendar", data);
+      await writeCachedValue("calendar", data);
       return data;
     },
     enabled: isWatching,
-    initialData: seedCalendar ?? undefined,
-    initialDataUpdatedAt: 0,
     staleTime: 1000 * 60 * 60 * 24,
   });
 
@@ -184,17 +215,32 @@ export default function CollectionsPage() {
   }, [calendar]);
 
   const episodesCacheKey = `episodes-${airingIds.join(",")}`;
-  const seedEpisodes = useMemo(
-    () => {
-      const raw = readCache<[number, number][]>(episodesCacheKey);
-      if (!raw) return null;
-      return new Map<number, number>(raw);
-    },
-    [episodesCacheKey],
-  );
+  const episodesQueryKey = ["episodes", airingIds.join(",")];
+
+  useEffect(() => {
+    if (!isWatching || airingIds.length === 0) return;
+
+    let cancelled = false;
+
+    async function hydrateEpisodes() {
+      const cached = await readCachedValueWithLegacy<[number, number][]>(
+        episodesCacheKey,
+        () => readLegacyHttpCache<[number, number][]>(episodesCacheKey),
+      );
+      if (!cancelled && cached && !queryClient.getQueryData(episodesQueryKey)) {
+        queryClient.setQueryData(episodesQueryKey, new Map<number, number>(cached));
+      }
+    }
+
+    void hydrateEpisodes();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [airingIds.length, episodesCacheKey, isWatching, queryClient]);
 
   const { data: episodeMap } = useQuery({
-    queryKey: ["episodes", airingIds.join(",")],
+    queryKey: episodesQueryKey,
     queryFn: async () => {
       if (airingIds.length === 0) return new Map<number, number>();
       const results = await Promise.allSettled(
@@ -210,12 +256,10 @@ export default function CollectionsPage() {
           map.set(id, airedCount);
         }
       }
-      writeCache(episodesCacheKey, [...map]);
+      await writeCachedValue(episodesCacheKey, [...map]);
       return map;
     },
     enabled: isWatching && airingIds.length > 0,
-    initialData: seedEpisodes ?? undefined,
-    initialDataUpdatedAt: 0,
     staleTime: 1000 * 60 * 60 * 24,
   });
 
@@ -256,7 +300,10 @@ export default function CollectionsPage() {
       const map = new Map<number, AiringTime>();
 
       for (const item of airingTimeTargets) {
-        const cached = readAiringCache(item.subjectId);
+        const cached = await readCachedValueWithLegacy<AiringTime>(
+          `${AIRING_CACHE_PREFIX}${item.subjectId}`,
+          () => readLegacyAiringCache(item.subjectId),
+        );
         if (cached) {
           map.set(item.subjectId, cached);
         }
@@ -268,7 +315,7 @@ export default function CollectionsPage() {
         if (!item.name) continue;
         const result = await getAiringAt(item.name);
         if (result) {
-          writeAiringCache(item.subjectId, result);
+          await writeCachedValue(`${AIRING_CACHE_PREFIX}${item.subjectId}`, result);
           map.set(item.subjectId, result);
         }
       }
@@ -303,6 +350,7 @@ export default function CollectionsPage() {
 
   useEffect(() => {
     const total = Math.max(1, Math.ceil(filtered.length / LIMIT));
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage((p) => Math.min(p, total));
   }, [filtered.length]);
 
@@ -319,10 +367,12 @@ export default function CollectionsPage() {
 
     // If page changed, reset to first item
     if (prevPageRef.current !== page) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFocusedIndex(0);
       prevPageRef.current = page;
     } else if (paged.length > 0) {
       // If only paged.length changed (data updated on same page), adjust to valid range
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFocusedIndex((i) => Math.min(i, paged.length - 1));
     }
   }, [paged.length, page]);
@@ -336,7 +386,9 @@ export default function CollectionsPage() {
     }
     // Only reset if type or search actually changed
     if (prevTypeRef.current !== collectionType || prevSearchRef.current !== searchText) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPage(1);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFocusedIndex(0);
       prevTypeRef.current = collectionType;
       prevSearchRef.current = searchText;
@@ -367,12 +419,7 @@ export default function CollectionsPage() {
   }
 
   const clearAiringCache = async () => {
-    for (let i = localStorage.length - 1; i >= 0; i -= 1) {
-      const key = localStorage.key(i);
-      if (key?.startsWith(AIRING_CACHE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    }
+    await deleteCachedValuesByPrefix(AIRING_CACHE_PREFIX);
     queryClient.resetQueries({ queryKey: ["anilist-airing-times"] });
     await queryClient.refetchQueries({ queryKey: ["anilist-airing-times"] });
     invoke("show_toast", { message: "播出时间已刷新" });

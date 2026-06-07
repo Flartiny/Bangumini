@@ -39,6 +39,7 @@ export default function SearchPage() {
 
   // Select the first result whenever the result set changes.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFocusedIndex(0);
     itemRefs.current = [];
   }, [keyword, typeFilter]);
@@ -122,5 +123,4 @@ export default function SearchPage() {
     </div>
   );
 }
-
 
