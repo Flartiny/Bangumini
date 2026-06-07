@@ -7,6 +7,7 @@ import type { CalendarItem } from "@shared/api/types";
 import {
   readCachedValueWithLegacy,
   readLegacyHttpCache,
+  writeCachedSubjectPreviews,
   writeCachedValue,
 } from "@shared/storage/sqlite-cache";
 import { WEEKDAY_CN, getTodayBangumiWeekday } from "@shared/sort-collections";
@@ -35,6 +36,9 @@ export default function CalendarPage() {
         "calendar",
         () => readLegacyHttpCache<CalendarItem[]>("calendar"),
       );
+      if (cached) {
+        await writeCachedSubjectPreviews(cached.flatMap((day) => day.items));
+      }
       if (!cancelled && cached && !queryClient.getQueryData(["calendar"])) {
         queryClient.setQueryData(["calendar"], cached);
       }
@@ -51,6 +55,7 @@ export default function CalendarPage() {
     queryKey: ["calendar"],
     queryFn: async () => {
       const data = await getCalendar();
+      await writeCachedSubjectPreviews(data.flatMap((day) => day.items));
       await writeCachedValue("calendar", data);
       return data;
     },

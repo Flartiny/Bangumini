@@ -5,6 +5,7 @@ import type {
   RelatedCharacter,
   RelatedPerson,
   Subject,
+  SubjectSmall,
   UserCollection,
 } from "@shared/api/types";
 
@@ -17,6 +18,11 @@ type PayloadRow = {
 type ImageCacheRow = {
   local_path: string;
   updated_at: number;
+};
+
+type CacheEntryRow = {
+  cache_key: string;
+  payload_json: string;
 };
 
 export type CachedImageRecord = {
@@ -103,6 +109,58 @@ function parsePayload<T>(rows: PayloadRow[]): T | null {
   }
 }
 
+function subjectFromSmall(subject: SubjectSmall): Subject {
+  return {
+    id: subject.id,
+    name: subject.name,
+    name_cn: subject.name_cn,
+    type: subject.type,
+    images: subject.images,
+    summary: subject.summary,
+    eps: 0,
+    total_episodes: 0,
+    rating: subject.rating ?? { total: 0, count: {}, score: 0 },
+    rank: subject.rank,
+    date: subject.air_date,
+    air_weekday: subject.air_weekday,
+  };
+}
+
+function findSubjectInPayload(subjectId: number, payload: unknown): Subject | null {
+  if (!payload || typeof payload !== "object") return null;
+
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const found = findSubjectInPayload(subjectId, item);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  if (record.id === subjectId && typeof record.name === "string") {
+    if ("air_date" in record) return subjectFromSmall(record as unknown as SubjectSmall);
+    return record as unknown as Subject;
+  }
+
+  if (record.subject && typeof record.subject === "object") {
+    const found = findSubjectInPayload(subjectId, record.subject);
+    if (found) return found;
+  }
+
+  if (Array.isArray(record.data)) {
+    const found = findSubjectInPayload(subjectId, record.data);
+    if (found) return found;
+  }
+
+  if (Array.isArray(record.items)) {
+    const found = findSubjectInPayload(subjectId, record.items);
+    if (found) return found;
+  }
+
+  return null;
+}
+
 async function readSubjectEntry<T>(subjectId: number, kind: string): Promise<T | null> {
   return withDatabase(async (db) => {
     const rows = await db.select<PayloadRow[]>(
@@ -147,6 +205,44 @@ export async function writeCachedSubject(subject: Subject) {
       [subject.id, JSON.stringify(subject), Date.now()],
     );
   }, undefined);
+}
+
+export async function writeCachedSubjectPreview(subject: Subject | SubjectSmall) {
+  if ("air_date" in subject) {
+    await writeCachedSubject(subjectFromSmall(subject));
+    return;
+  }
+  await writeCachedSubject(subject);
+}
+
+export async function writeCachedSubjectPreviews(subjects: Array<Subject | SubjectSmall>) {
+  await Promise.all(subjects.map((subject) => writeCachedSubjectPreview(subject)));
+}
+
+export async function readCachedSubjectDeep(subjectId: number): Promise<Subject | null> {
+  const cached = await readCachedSubject(subjectId);
+  if (cached) return cached;
+
+  return withDatabase(async (db) => {
+    const rows = await db.select<CacheEntryRow[]>(
+      "SELECT cache_key, payload_json FROM cache_entries",
+    );
+
+    for (const row of rows) {
+      try {
+        const payload = JSON.parse(row.payload_json) as unknown;
+        const subject = findSubjectInPayload(subjectId, payload);
+        if (subject) {
+          await writeCachedSubject(subject);
+          return subject;
+        }
+      } catch {
+        // Ignore malformed cache entries.
+      }
+    }
+
+    return null;
+  }, null);
 }
 
 export async function readCachedCollection(

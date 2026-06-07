@@ -17,6 +17,7 @@ import {
   deleteCachedValuesByPrefix,
   readCachedValueWithLegacy,
   readLegacyHttpCache,
+  writeCachedSubjectPreviews,
   writeCachedValue,
 } from "@shared/storage/sqlite-cache";
 import { getUsername } from "../api/oauth";
@@ -139,6 +140,9 @@ export default function CollectionsPage() {
         collectionsCacheKey,
         () => readLegacyHttpCache<PagedResponse<UserCollection>>(`collections-${collectionType}-${uname}`),
       );
+      if (cached) {
+        await writeCachedSubjectPreviews(cached.data.map((item) => item.subject));
+      }
       if (!cancelled && cached && !queryClient.getQueryData(["collections", collectionType, uname])) {
         queryClient.setQueryData(["collections", collectionType, uname], cached);
       }
@@ -161,6 +165,7 @@ export default function CollectionsPage() {
       } else {
         result = await getUserCollections({ username: uname, type: parseInt(collectionType), limit: 100 });
       }
+      await writeCachedSubjectPreviews(result.data.map((item) => item.subject));
       await writeCachedValue(collectionsCacheKey, result);
       return result;
     },
@@ -178,6 +183,9 @@ export default function CollectionsPage() {
         "calendar",
         () => readLegacyHttpCache<CalendarItem[]>("calendar"),
       );
+      if (cached) {
+        await writeCachedSubjectPreviews(cached.flatMap((day) => day.items));
+      }
       if (!cancelled && cached && !queryClient.getQueryData(["calendar"])) {
         queryClient.setQueryData(["calendar"], cached);
       }
@@ -194,6 +202,7 @@ export default function CollectionsPage() {
     queryKey: ["calendar"],
     queryFn: async () => {
       const data = await getCalendar();
+      await writeCachedSubjectPreviews(data.flatMap((day) => day.items));
       await writeCachedValue("calendar", data);
       return data;
     },

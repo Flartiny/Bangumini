@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { searchSubjects } from "@shared/api/client";
 import { SubjectTypeLabel } from "@shared/api/types";
+import { writeCachedSubjectPreviews } from "@shared/storage/sqlite-cache";
 import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
 import { SearchIcon } from "../components/icons";
 
@@ -26,11 +27,14 @@ export default function SearchPage() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["search", keyword, typeFilter],
-    queryFn: () =>
-      searchSubjects({
+    queryFn: async () => {
+      const result = await searchSubjects({
         keyword,
         type: typeFilter ? [parseInt(typeFilter)] : undefined,
-      }),
+      });
+      await writeCachedSubjectPreviews(result.data);
+      return result;
+    },
     enabled: keyword.length > 0,
     staleTime: 30_000,
   });
@@ -123,4 +127,3 @@ export default function SearchPage() {
     </div>
   );
 }
-

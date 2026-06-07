@@ -20,7 +20,7 @@ import {
   readCachedCollection,
   readCachedEpisodes,
   readCachedPersons,
-  readCachedSubject,
+  readCachedSubjectDeep,
   writeCachedCharacters,
   writeCachedCollection,
   writeCachedEpisodes,
@@ -102,7 +102,7 @@ export default function SubjectDetailPage() {
         cachedEpisodes,
         cachedCollection,
       ] = await Promise.all([
-        readCachedSubject(subjectId),
+        readCachedSubjectDeep(subjectId),
         readCachedPersons(subjectId),
         readCachedCharacters(subjectId),
         readCachedEpisodes(subjectId),
@@ -141,36 +141,52 @@ export default function SubjectDetailPage() {
   const { data: subject } = useQuery({
     queryKey: ["subject", subjectId],
     queryFn: async () => {
-      const result = await getSubject(subjectId);
-      await writeCachedSubject(result);
-      return result;
+      try {
+        const result = await getSubject(subjectId);
+        await writeCachedSubject(result);
+        return result;
+      } catch {
+        return readCachedSubjectDeep(subjectId);
+      }
     },
   });
 
   const { data: persons } = useQuery({
     queryKey: ["persons", subjectId],
     queryFn: async () => {
-      const result = await getSubjectPersons(subjectId);
-      await writeCachedPersons(subjectId, result);
-      return result;
+      try {
+        const result = await getSubjectPersons(subjectId);
+        await writeCachedPersons(subjectId, result);
+        return result;
+      } catch {
+        return readCachedPersons(subjectId);
+      }
     },
   });
 
   const { data: characters } = useQuery({
     queryKey: ["characters", subjectId],
     queryFn: async () => {
-      const result = await getSubjectCharacters(subjectId);
-      await writeCachedCharacters(subjectId, result);
-      return result;
+      try {
+        const result = await getSubjectCharacters(subjectId);
+        await writeCachedCharacters(subjectId, result);
+        return result;
+      } catch {
+        return readCachedCharacters(subjectId);
+      }
     },
   });
 
   const { data: episodeData } = useQuery({
     queryKey: ["episodes", subjectId],
     queryFn: async () => {
-      const result = await getEpisodes(subjectId);
-      await writeCachedEpisodes(subjectId, result);
-      return result;
+      try {
+        const result = await getEpisodes(subjectId);
+        await writeCachedEpisodes(subjectId, result);
+        return result;
+      } catch {
+        return readCachedEpisodes(subjectId);
+      }
     },
   });
 
