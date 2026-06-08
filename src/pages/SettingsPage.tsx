@@ -2,9 +2,21 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { clearToken, setToken } from "../api/oauth";
 import ShortcutRecorder from "../components/ShortcutRecorder";
+
+type DistributionKind = "installer" | "portable";
+
+const getPortableDownloadUrl = (version: string) => {
+  if (!version) {
+    return "https://github.com/Flartiny/Bangumini/releases/latest";
+  }
+
+  const plainVersion = version.replace(/^v/, "");
+  return `https://github.com/Flartiny/Bangumini/releases/download/${version}/Bangumini_${plainVersion}_portable.zip`;
+};
 
 export default function SettingsPage() {
   const [tokenText, setTokenText] = useState("");
@@ -14,6 +26,7 @@ export default function SettingsPage() {
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error">("idle");
   const [latestVersion, setLatestVersion] = useState("");
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [distributionKind, setDistributionKind] = useState<DistributionKind>("installer");
   const updateRef = useRef<Awaited<ReturnType<typeof check>>>(null);
 
   useEffect(() => {
@@ -21,6 +34,9 @@ export default function SettingsPage() {
       .then(setAutostart)
       .catch(() => setAutostart(false))
       .finally(() => setAutostartLoading(false));
+    invoke<DistributionKind>("get_distribution_kind")
+      .then(setDistributionKind)
+      .catch(() => setDistributionKind("installer"));
     getVersion().then(setCurrentVersion).catch(() => {});
   }, []);
 
@@ -41,6 +57,11 @@ export default function SettingsPage() {
   };
 
   const handleDownloadUpdate = async () => {
+    if (distributionKind === "portable") {
+      await openUrl(getPortableDownloadUrl(latestVersion));
+      return;
+    }
+
     setUpdateStatus("downloading");
     try {
       const update = updateRef.current;
@@ -50,11 +71,15 @@ export default function SettingsPage() {
           switch (event.event) {
             case "Started":
               total = event.data?.contentLength ?? 0;
+              setDownloadProgress(0);
               break;
             case "Progress":
               setDownloadProgress((prev) => {
+                if (!total) {
+                  return prev;
+                }
                 const next = prev + ((event.data?.chunkLength ?? 0) / total) * 100;
-                return Math.round(next);
+                return Math.min(100, Math.round(next));
               });
               break;
             case "Finished":
@@ -163,7 +188,7 @@ export default function SettingsPage() {
         {updateStatus === "available" && (
           <div className="flex gap-2">
             <button onClick={handleDownloadUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-accent text-accent-fg rounded-md hover:opacity-90 transition-opacity">
-              下载更新
+              {distributionKind === "portable" ? "下载便携版" : "下载更新"}
             </button>
             <button onClick={handleCheckUpdate} className="px-4 py-1.5 text-[13px] font-medium bg-elevated text-fg-secondary rounded-md border border-line hover:bg-hover transition-colors">
               重新检查

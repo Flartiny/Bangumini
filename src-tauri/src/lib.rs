@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+#[cfg(windows)]
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
@@ -422,6 +424,7 @@ pub fn run() {
             register_shortcut,
             set_autostart,
             get_autostart,
+            get_distribution_kind,
             set_dragging,
             show_toast,
             cache_image,
@@ -631,6 +634,100 @@ fn set_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
 fn get_autostart(app: tauri::AppHandle) -> Result<bool, String> {
     use tauri_plugin_autostart::ManagerExt;
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
+}
+
+#[cfg(windows)]
+fn value_matches_path(value: &str, exe: &Path, dir: &Path) -> bool {
+    let value = value.replace('/', "\\").to_ascii_lowercase();
+    let exe = exe
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    let dir = dir
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    value.contains(&exe) || value.contains(&dir)
+}
+
+#[cfg(windows)]
+fn has_matching_uninstall_entry(exe: &Path, dir: &Path) -> bool {
+    use winreg::enums::{
+        HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, KEY_WOW64_64KEY,
+    };
+    use winreg::RegKey;
+
+    let hives = [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE];
+    let views = [KEY_READ | KEY_WOW64_64KEY, KEY_READ | KEY_WOW64_32KEY];
+
+    hives.iter().any(|hive| {
+        views.iter().any(|view| {
+            let root = RegKey::predef(*hive);
+            let uninstall = root.open_subkey_with_flags(
+                "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+                *view,
+            );
+
+            uninstall.ok().is_some_and(|key| {
+                key.enum_keys().flatten().any(|subkey_name| {
+                    let Ok(subkey) = key.open_subkey_with_flags(subkey_name, *view) else {
+                        return false;
+                    };
+                    let display_name: String = subkey.get_value("DisplayName").unwrap_or_default();
+                    if display_name != "Bangumini" {
+                        return false;
+                    }
+
+                    ["InstallLocation", "DisplayIcon", "UninstallString"]
+                        .iter()
+                        .filter_map(|name| subkey.get_value::<String, _>(*name).ok())
+                        .any(|value| value_matches_path(&value, exe, dir))
+                })
+            })
+        })
+    })
+}
+
+#[cfg(windows)]
+fn is_in_common_install_location(dir: &Path) -> bool {
+    ["LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"]
+        .iter()
+        .filter_map(|key| std::env::var_os(key))
+        .map(std::path::PathBuf::from)
+        .any(|root| {
+            dir.starts_with(root.join("Programs").join("Bangumini"))
+                || dir.starts_with(root.join("Bangumini"))
+        })
+}
+
+#[cfg(windows)]
+fn detect_distribution_kind() -> String {
+    let Ok(exe) = std::env::current_exe() else {
+        return "portable".to_string();
+    };
+    let Some(dir) = exe.parent() else {
+        return "portable".to_string();
+    };
+
+    if dir.join("Bangumini.portable").exists() {
+        return "portable".to_string();
+    }
+
+    if has_matching_uninstall_entry(&exe, dir) || is_in_common_install_location(dir) {
+        "installer".to_string()
+    } else {
+        "portable".to_string()
+    }
+}
+
+#[cfg(not(windows))]
+fn detect_distribution_kind() -> String {
+    "installer".to_string()
+}
+
+#[tauri::command]
+fn get_distribution_kind() -> String {
+    detect_distribution_kind()
 }
 
 #[tauri::command]
