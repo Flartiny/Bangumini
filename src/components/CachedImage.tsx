@@ -17,6 +17,29 @@ type CachedImageProps = {
   loading?: "eager" | "lazy";
 };
 
+const inFlightImageCache = new Map<string, Promise<string>>();
+
+function cacheImageOnce(remoteUrl: string) {
+  const existing = inFlightImageCache.get(remoteUrl);
+  if (existing) return existing;
+
+  const request = invoke<CacheImageResult>("cache_image", { remoteUrl })
+    .then(async (result) => {
+      await writeCachedImage({
+        remoteUrl,
+        localPath: result.local_path,
+        updatedAt: Date.now(),
+      });
+      return result.local_path;
+    })
+    .finally(() => {
+      inFlightImageCache.delete(remoteUrl);
+    });
+
+  inFlightImageCache.set(remoteUrl, request);
+  return request;
+}
+
 export default function CachedImage({
   src,
   alt = "",
@@ -46,15 +69,9 @@ export default function CachedImage({
       }
 
       try {
-        const result = await invoke<CacheImageResult>("cache_image", { remoteUrl: src });
+        const localPath = await cacheImageOnce(src);
         if (cancelled) return;
-
-        await writeCachedImage({
-          remoteUrl: src,
-          localPath: result.local_path,
-          updatedAt: Date.now(),
-        });
-        setCachedSrc({ remoteUrl: src, displayUrl: convertFileSrc(result.local_path) });
+        setCachedSrc({ remoteUrl: src, displayUrl: convertFileSrc(localPath) });
       } catch {
         if (!cancelled) setCachedSrc(null);
       }
