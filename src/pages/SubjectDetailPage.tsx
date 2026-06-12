@@ -105,6 +105,7 @@ export default function SubjectDetailPage() {
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const initialEpStatus = useRef<number | null>(null);
+  const collectionChangedRef = useRef(false);
   const leftColumnRef = useRef<HTMLDivElement>(null);
 
   const { data: subject } = useQuery({
@@ -216,6 +217,20 @@ export default function SubjectDetailPage() {
     },
   });
 
+  async function syncLocalCollection(patch: Partial<UserCollection>) {
+    const current = queryClient.getQueryData<UserCollection | null>(collectionQueryKey) ?? collection ?? null;
+    if (!current) return null;
+
+    const next = { ...current, ...patch };
+    queryClient.setQueryData(collectionQueryKey, next);
+
+    const uname = getUsername();
+    if (uname) {
+      await writeCachedCollection(uname, next);
+    }
+    return next;
+  }
+
   const sorted = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
   const mainEps = sorted.filter((e) => e.type === 0);
   const totalEp = mainEps.length > 0 ? mainEps.length : (subject?.total_episodes ?? 0);
@@ -294,12 +309,17 @@ export default function SubjectDetailPage() {
       const from = Math.min(currentEp, targetEp);
       const to = Math.max(currentEp, targetEp);
       const ids = mainEps.slice(from, to).map((e) => e.id);
+      if (ids.length === 0 && from !== to) {
+        throw new Error("Episode list is not ready");
+      }
       if (ids.length > 0) {
         await patchSubjectEpisodes(subjectId, { episode_id: ids, type: targetEp > currentEp ? 2 : 0 });
       }
       await fetchCollectionFromNetwork();
+      await syncLocalCollection({ ep_status: targetEp, type: 3 });
       syncCollectionsCache(queryClient, subjectId);
       setTargetEp(null);
+      collectionChangedRef.current = true;
       saved = true;
     } catch {
       await showSaveFailedToast("进度保存失败，请检查网络后重试");
@@ -320,6 +340,7 @@ export default function SubjectDetailPage() {
           postUserCollection(subjectId, { type: 2 })
             .then(() => {
               fetchCollectionFromNetwork().then(() => syncCollectionsCache(queryClient, subjectId));
+              collectionChangedRef.current = true;
             })
             .catch(() => {
               void showSaveFailedToast("收藏状态保存失败，请检查网络后重试");
@@ -336,6 +357,7 @@ export default function SubjectDetailPage() {
       await postUserCollection(subjectId, { type });
       await fetchCollectionFromNetwork();
       syncCollectionsCache(queryClient, subjectId);
+      collectionChangedRef.current = true;
     } catch {
       await showSaveFailedToast("收藏状态保存失败，请检查网络后重试");
     } finally {
@@ -346,7 +368,7 @@ export default function SubjectDetailPage() {
   const handleBack = useCallback(() => {
     const state = location.state as { fromCollections?: boolean; page?: number; focusedIndex?: number } | null;
     const currentEpStatus = collection?.ep_status ?? 0;
-    const hasChanged = initialEpStatus.current !== null && initialEpStatus.current !== currentEpStatus;
+    const hasChanged = collectionChangedRef.current || (initialEpStatus.current !== null && initialEpStatus.current !== currentEpStatus);
     if (state?.fromCollections && hasChanged) {
       navigate("/collections", { state: { fromSubject: true, subjectId, page: state.page, focusedIndex: state.focusedIndex } });
     } else {

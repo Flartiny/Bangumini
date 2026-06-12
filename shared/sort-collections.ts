@@ -30,7 +30,8 @@ export function getCollectionMeta(
   const weekday = airingMap.get(c.subject_id) ?? c.subject.air_weekday ?? 0;
   const isAiring = airingMap.has(c.subject_id);
   const totalEp = getTotalEp(c);
-  const airedEp = isAiring ? (airedEpMap.get(c.subject_id) ?? totalEp) : totalEp;
+  const knownAiredEp = isAiring ? airedEpMap.get(c.subject_id) : totalEp;
+  const airedEp = knownAiredEp ?? Math.max(1, c.ep_status);
 
   let group: SortedGroup;
   if (!isAiring && c.ep_status === 0) {

@@ -29,6 +29,8 @@ const COLLECTIONS_CACHE_PREFIX = "collections-";
 const AIRING_CACHE_PREFIX = "anilist-airing-";
 const AIRING_REQUEST_DELAY = 700;
 const QUERY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24;
+const EMPTY_COLLECTIONS: UserCollection[] = [];
+const EMPTY_EPISODE_MAP = new Map<number, number>();
 
 type AiringTime = { airingAt: number; episode: number };
 type CollectionsLocationState = {
@@ -122,11 +124,20 @@ export default function CollectionsPage() {
   useEffect(() => {
     const state = location.state as CollectionsLocationState | null;
     if (state?.fromSubject && state?.subjectId) {
-      void deleteCachedValuesByPrefix(COLLECTIONS_CACHE_PREFIX);
-      queryClient.invalidateQueries({ queryKey: ["collections"] });
+      let cancelled = false;
+      void (async () => {
+        await deleteCachedValuesByPrefix(COLLECTIONS_CACHE_PREFIX);
+        if (!cancelled) {
+          await queryClient.invalidateQueries({ queryKey: ["collections"] });
+        }
+      })();
       window.history.replaceState({}, document.title);
       // Reset the flag after other effects have run
-      setTimeout(() => { isReturningFromDetail.current = false; }, 100);
+      const timer = window.setTimeout(() => { isReturningFromDetail.current = false; }, 100);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
     }
   }, [location, queryClient]);
 
@@ -191,7 +202,7 @@ export default function CollectionsPage() {
     staleTime: 1000 * 60 * 60 * 24,
   });
 
-  const rawCollections = collData?.data ?? [];
+  const rawCollections = collData?.data ?? EMPTY_COLLECTIONS;
 
   const airingIds = useMemo(() => {
     if (!calendar) return [];
@@ -247,7 +258,7 @@ export default function CollectionsPage() {
     staleTime: 1000 * 60 * 60 * 24,
   });
 
-  const airedEpMap = episodeMap ?? new Map<number, number>();
+  const airedEpMap = episodeMap ?? EMPTY_EPISODE_MAP;
 
   const airingMap = useMemo(() => {
     const map = new Map<number, number>();
