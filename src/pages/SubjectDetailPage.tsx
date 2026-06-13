@@ -86,9 +86,34 @@ const COLLECTION_OPTIONS: { type: CollectionType; label: string; key: string }[]
 ];
 
 const DETAIL_CACHE_MAX_AGE = 1000 * 60 * 60 * 24;
+const SUMMARY_ORIGINAL_MARKER = "[简介原文]";
+
+type SummaryBlock =
+  | { type: "heading"; text: string }
+  | { type: "paragraph"; text: string };
 
 function hasSummary(subject: UserCollection["subject"] | null | undefined) {
   return !!subject?.summary?.trim();
+}
+
+function getSummaryBlocks(summary: string): SummaryBlock[] {
+  const blocks: SummaryBlock[] = [];
+
+  for (const rawParagraph of summary.split(/\n\s*\n/)) {
+    const paragraph = rawParagraph.trim();
+    if (!paragraph) continue;
+
+    const parts = paragraph.split(SUMMARY_ORIGINAL_MARKER);
+    parts.forEach((part, index) => {
+      const text = part.trim();
+      if (text) blocks.push({ type: "paragraph", text });
+      if (index < parts.length - 1) {
+        blocks.push({ type: "heading", text: "简介原文" });
+      }
+    });
+  }
+
+  return blocks;
 }
 
 type ConfirmDialog = {
@@ -576,13 +601,26 @@ export default function SubjectDetailPage() {
             <section>
               <h3 className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary mb-2">简介</h3>
               <div className="text-[13px] text-fg-secondary leading-relaxed space-y-3">
-                {subject.summary.split(/\n\s*\n/).filter(Boolean).map((para, i) => (
-                  <p
-                    key={i}
-                    className="cursor-pointer hover:text-accent transition-colors whitespace-pre-line"
-                    onClick={() => copyText(para.trim())}
-                  >{para.trim()}</p>
-                ))}
+                {getSummaryBlocks(subject.summary).map((block, i) => {
+                  if (block.type === "heading") {
+                    return (
+                      <h3
+                        key={`${block.type}-${i}`}
+                        className="text-[11px] font-semibold uppercase tracking-wide text-fg-tertiary pt-2"
+                      >
+                        {block.text}
+                      </h3>
+                    );
+                  }
+
+                  return (
+                    <p
+                      key={`${block.type}-${i}`}
+                      className="cursor-pointer hover:text-accent transition-colors whitespace-pre-line"
+                      onClick={() => copyText(block.text)}
+                    >{block.text}</p>
+                  );
+                })}
               </div>
             </section>
           )}
