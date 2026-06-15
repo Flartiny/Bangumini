@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getNextSeason, getNextSeasonInfo } from "@shared/api/anilist";
@@ -22,6 +22,13 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 const ANILIST_WEEKDAY_CN: Record<number, string> = {
   0: "星期日", 1: "星期一", 2: "星期二", 3: "星期三",
   4: "星期四", 5: "星期五", 6: "星期六",
+};
+
+type NextSeasonLocationState = {
+  fromSubject?: boolean;
+  subjectId?: number;
+  currentDay?: number | "tba";
+  focusedIndex?: number;
 };
 
 interface SeasonEntry extends NextSeasonItem {
@@ -158,14 +165,34 @@ async function fetchAndCacheNextSeason(nextSeasonCacheKey: string) {
 
 export default function NextSeasonPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const filterText = searchParams.get("filter") ?? "";
   const filterWeekday = searchParams.get("weekday") ?? "";
   const { label: seasonLabel } = getNextSeasonInfo();
-  const [currentDay, setCurrentDay] = useState<number | "tba">(0);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  // Check if returning from detail page
+  const initialState = useMemo(() => {
+    const state = location.state as NextSeasonLocationState | null;
+    if (state?.fromSubject && state?.subjectId) {
+      return {
+        currentDay: state.currentDay ?? 0,
+        focusedIndex: state.focusedIndex ?? 0,
+        isReturningFromDetail: true,
+      };
+    }
+    return {
+      currentDay: 0 as number | "tba",
+      focusedIndex: 0,
+      isReturningFromDetail: false,
+    };
+  }, [location.state]);
+
+  const [currentDay, setCurrentDay] = useState<number | "tba">(initialState.currentDay);
+  const [focusedIndex, setFocusedIndex] = useState(initialState.focusedIndex);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const isReturningFromDetail = useRef(initialState.isReturningFromDetail);
   const isFiltering = filterText !== "" || filterWeekday !== "";
   const nextSeasonCacheKey = getNextSeasonCacheKey();
   const nextSeasonQueryKey = ["next-season", seasonLabel] as const;
@@ -233,9 +260,20 @@ export default function NextSeasonPage() {
 
   const hasTba = groups.has("tba");
 
+  // Clear navigation state after returning from detail
+  useEffect(() => {
+    const state = location.state as NextSeasonLocationState | null;
+    if (state?.fromSubject) {
+      window.history.replaceState({}, document.title);
+      const timer = window.setTimeout(() => { isReturningFromDetail.current = false; }, 100);
+      return () => window.clearTimeout(timer);
+    }
+  }, [location.state]);
+
   // Default to day of earliest entry
   useEffect(() => {
     if (entries.length === 0) return;
+    if (isReturningFromDetail.current) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentDay(earliestEntryDay(entries));
   }, [entries]);
@@ -284,8 +322,9 @@ export default function NextSeasonPage() {
   const allFilteredItems = filteredGroups.flatMap((g) => g.items);
   const currentItems = isFiltering ? allFilteredItems : (groups.get(currentDay) ?? []);
 
-  // Reset focus when day or filter changes
+  // Reset focus when day or filter changes (but not when returning from detail)
   useEffect(() => {
+    if (isReturningFromDetail.current) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFocusedIndex(0);
   }, [currentDay, filterText, filterWeekday]);
@@ -370,7 +409,9 @@ export default function NextSeasonPage() {
       handler: () => {
         const item = currentItems[focusedIndex];
         if (item?.bangumiId) {
-          navigate(`/subject/${item.bangumiId}`);
+          navigate(`/subject/${item.bangumiId}`, {
+            state: { fromNextSeason: true, currentDay, focusedIndex },
+          });
         } else if (item) {
           import("@tauri-apps/plugin-opener").then(({ openUrl }) => {
             openUrl(`https://anilist.co/anime/${item.id}`);
@@ -436,7 +477,9 @@ export default function NextSeasonPage() {
                           onClick={() => setFocusedIndex(idx)}
                           onDoubleClick={() => {
                             if (item.bangumiId) {
-                              navigate(`/subject/${item.bangumiId}`);
+                              navigate(`/subject/${item.bangumiId}`, {
+                                state: { fromNextSeason: true, currentDay, focusedIndex: idx },
+                              });
                             } else {
                               import("@tauri-apps/plugin-opener").then(({ openUrl }) => {
                                 openUrl(`https://anilist.co/anime/${item.id}`);
@@ -492,7 +535,9 @@ export default function NextSeasonPage() {
                   onClick={() => setFocusedIndex(index)}
                   onDoubleClick={() => {
                     if (item.bangumiId) {
-                      navigate(`/subject/${item.bangumiId}`);
+                      navigate(`/subject/${item.bangumiId}`, {
+                        state: { fromNextSeason: true, currentDay, focusedIndex: index },
+                      });
                     } else {
                       import("@tauri-apps/plugin-opener").then(({ openUrl }) => {
                         openUrl(`https://anilist.co/anime/${item.id}`);

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getCalendar } from "@shared/api/client";
@@ -21,6 +21,13 @@ import { isCacheStale, refreshQueryDataIfChanged } from "../api/stale-cache-refr
 const QUERY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24;
 const CALENDAR_QUERY_KEY = ["calendar"] as const;
 
+type CalendarLocationState = {
+  fromSubject?: boolean;
+  subjectId?: number;
+  currentDay?: number;
+  focusedIndex?: number;
+};
+
 async function fetchAndCacheCalendar() {
   const data = await getCalendar();
   await writeCachedSubjectPreviews(data.flatMap((day) => day.items));
@@ -30,12 +37,32 @@ async function fetchAndCacheCalendar() {
 
 export default function CalendarPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const today = getTodayBangumiWeekday();
-  const [currentDay, setCurrentDay] = useState<number>(today);
-  const [focusedIndex, setFocusedIndex] = useState(0);
+
+  // Check if returning from detail page
+  const initialState = useMemo(() => {
+    const state = location.state as CalendarLocationState | null;
+    if (state?.fromSubject && state?.subjectId) {
+      return {
+        currentDay: state.currentDay ?? today,
+        focusedIndex: state.focusedIndex ?? 0,
+        isReturningFromDetail: true,
+      };
+    }
+    return {
+      currentDay: today,
+      focusedIndex: 0,
+      isReturningFromDetail: false,
+    };
+  }, [location.state, today]);
+
+  const [currentDay, setCurrentDay] = useState<number>(initialState.currentDay);
+  const [focusedIndex, setFocusedIndex] = useState(initialState.focusedIndex);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const isReturningFromDetail = useRef(initialState.isReturningFromDetail);
 
   const filterText = searchParams.get("filter") ?? "";
   const filterWeekday = searchParams.get("weekday") ?? "";
@@ -112,8 +139,19 @@ export default function CalendarPage() {
   // The items to display (filtered or normal)
   const displayItems = isFiltering ? filteredItems : (currentDayData?.items ?? []);
 
-  // Reset focus when items change
+  // Clear navigation state after returning from detail
   useEffect(() => {
+    const state = location.state as CalendarLocationState | null;
+    if (state?.fromSubject) {
+      window.history.replaceState({}, document.title);
+      const timer = window.setTimeout(() => { isReturningFromDetail.current = false; }, 100);
+      return () => window.clearTimeout(timer);
+    }
+  }, [location.state]);
+
+  // Reset focus when items change (but not when returning from detail)
+  useEffect(() => {
+    if (isReturningFromDetail.current) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setFocusedIndex(0);
     itemRefs.current = [];
@@ -174,7 +212,11 @@ export default function CalendarPage() {
       when: () => displayItems.length > 0,
       handler: () => {
         const item = displayItems[focusedIndex];
-        if (item) navigate(`/subject/${item.id}`);
+        if (item) {
+          navigate(`/subject/${item.id}`, {
+            state: { fromCalendar: true, currentDay, focusedIndex },
+          });
+        }
       },
     },
     {
@@ -240,7 +282,9 @@ export default function CalendarPage() {
                             subtitle={s.name_cn && s.name ? s.name : undefined}
                             selected={idx === focusedIndex}
                             onClick={() => setFocusedIndex(idx)}
-                            onDoubleClick={() => navigate(`/subject/${s.id}`)}
+                            onDoubleClick={() => navigate(`/subject/${s.id}`, {
+                              state: { fromCalendar: true, currentDay, focusedIndex: idx },
+                            })}
                             accessories={
                               <>
                                 {s.rating?.score ? <Rating score={s.rating.score} /> : null}
@@ -296,7 +340,9 @@ export default function CalendarPage() {
                     subtitle={s.name_cn && s.name ? s.name : undefined}
                     selected={index === focusedIndex}
                     onClick={() => setFocusedIndex(index)}
-                    onDoubleClick={() => navigate(`/subject/${s.id}`)}
+                    onDoubleClick={() => navigate(`/subject/${s.id}`, {
+                      state: { fromCalendar: true, currentDay, focusedIndex: index },
+                    })}
                     accessories={
                       <>
                         {s.rating?.score ? <Rating score={s.rating.score} /> : null}
