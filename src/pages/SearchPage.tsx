@@ -9,6 +9,8 @@ import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
 import { SearchIcon } from "../components/icons";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 
+const DEFAULT_SEARCH_TYPE = "2";
+
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-fg-tertiary">
@@ -22,7 +24,9 @@ export default function SearchPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const keyword = searchParams.get("q") ?? "";
-  const typeFilter = searchParams.get("stype") ?? "";
+  const typeFilter = searchParams.has("stype")
+    ? searchParams.get("stype") ?? ""
+    : DEFAULT_SEARCH_TYPE;
   const [focusedIndex, setFocusedIndex] = useState(0);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 

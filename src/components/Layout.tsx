@@ -41,6 +41,8 @@ const SUBJECT_TYPES = [
   { value: "6", label: "三次元" },
 ];
 
+const DEFAULT_SEARCH_TYPE = "2";
+
 const NEXT_SEASON_WEEKDAYS = [
   { value: "", label: "全部" },
   { value: "0", label: "周日" },
@@ -112,7 +114,9 @@ export default function Layout() {
     if (kind === "search") {
       return {
         options: SUBJECT_TYPES,
-        currentValue: searchParams.get("stype") ?? "2",
+        currentValue: searchParams.has("stype")
+          ? searchParams.get("stype") ?? ""
+          : DEFAULT_SEARCH_TYPE,
         title: "条目类型",
       };
     }
@@ -141,8 +145,7 @@ export default function Layout() {
     const params = new URLSearchParams(searchParams);
 
     if (kind === "search") {
-      if (nextValue) params.set("stype", nextValue);
-      else params.delete("stype");
+      params.set("stype", nextValue);
     } else if (kind === "collections") {
       params.set("type", nextValue);
       params.delete("filter");
@@ -305,7 +308,9 @@ export default function Layout() {
   const filterBar = (() => {
     if (isSearchPage) {
       const q = searchParams.get("q") ?? "";
-      const stype = searchParams.get("stype") ?? "2";
+      const stype = searchParams.has("stype")
+        ? searchParams.get("stype") ?? ""
+        : DEFAULT_SEARCH_TYPE;
       return (
         <>
           <div className="relative flex-1 max-w-md">
@@ -334,7 +339,9 @@ export default function Layout() {
                   e.nativeEvent.stopImmediatePropagation();
                   const params = new URLSearchParams();
                   params.set("q", val);
-                  if (stype) params.set("stype", stype);
+                  if (searchParams.has("stype")) {
+                    params.set("stype", searchParams.get("stype") ?? "");
+                  }
                   setSearchParams(params);
                 }
               }}
