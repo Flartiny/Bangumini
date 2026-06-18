@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
@@ -12,7 +12,7 @@ import {
   postUserCollection,
 } from "@shared/api/client";
 import { CollectionTypeLabel } from "@shared/api/types";
-import type { CollectionType, UserCollection } from "@shared/api/types";
+import type { CollectionType, Episode, PagedResponse, UserCollection } from "@shared/api/types";
 import type { QueryClient } from "@tanstack/react-query";
 import {
   deleteCachedCollection,
@@ -181,15 +181,22 @@ type ConfirmDialog = {
 
 export default function SubjectDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const subjectId = Number(id);
+
+  return <SubjectDetailContent key={subjectId} subjectId={subjectId} />;
+}
+
+function SubjectDetailContent({ subjectId }: { subjectId: number }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const subjectId = Number(id);
   const queryClient = useQueryClient();
   const [targetEp, setTargetEp] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
+  const [loadSecondaryDetailData, setLoadSecondaryDetailData] = useState(false);
+  const [loadEpisodeData, setLoadEpisodeData] = useState(false);
   const initialEpStatus = useRef<number | null>(null);
   const collectionChangedRef = useRef(false);
   const leftColumnRef = useRef<HTMLDivElement>(null);
@@ -221,6 +228,32 @@ export default function SubjectDetailPage() {
     return result;
   }
 
+  async function loadEpisodesFromCacheOrNetwork() {
+    const cached = await readCachedEpisodesWithin(subjectId, DETAIL_CACHE_MAX_AGE);
+    if (cached) return cached;
+
+    const stale = await readCachedEpisodes(subjectId);
+    if (stale) {
+      refreshQueryInBackground(queryClient, episodesQueryKey, fetchEpisodesFromNetwork);
+      return stale;
+    }
+
+    try {
+      return await fetchEpisodesFromNetwork();
+    } catch {
+      return readCachedEpisodes(subjectId);
+    }
+  }
+
+  async function ensureEpisodesLoaded() {
+    setLoadEpisodeData(true);
+    const result = await queryClient.ensureQueryData<PagedResponse<Episode> | null>({
+      queryKey: episodesQueryKey,
+      queryFn: loadEpisodesFromCacheOrNetwork,
+    });
+    return result;
+  }
+
   const { data: subject } = useQuery({
     queryKey: subjectQueryKey,
     queryFn: async () => {
@@ -246,8 +279,30 @@ export default function SubjectDetailPage() {
     },
   });
 
+  useEffect(() => {
+    if (!subject) return;
+
+    const timer = window.setTimeout(() => {
+      setLoadSecondaryDetailData(true);
+    }, 140);
+
+    return () => window.clearTimeout(timer);
+  }, [subject]);
+
+  useEffect(() => {
+    if (!subject) return;
+    if ((subject.total_episodes ?? 0) > 0) return;
+
+    const timer = window.setTimeout(() => {
+      setLoadEpisodeData(true);
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [subject]);
+
   const { data: persons } = useQuery({
     queryKey: personsQueryKey,
+    enabled: loadSecondaryDetailData && Boolean(subject),
     queryFn: async () => {
       const cached = await readCachedPersonsWithin(subjectId, DETAIL_CACHE_MAX_AGE);
       if (cached) return cached;
@@ -268,6 +323,7 @@ export default function SubjectDetailPage() {
 
   const { data: characters } = useQuery({
     queryKey: charactersQueryKey,
+    enabled: loadSecondaryDetailData && Boolean(subject),
     queryFn: async () => {
       const cached = await readCachedCharactersWithin(subjectId, DETAIL_CACHE_MAX_AGE);
       if (cached) return cached;
@@ -288,22 +344,8 @@ export default function SubjectDetailPage() {
 
   const { data: episodeData } = useQuery({
     queryKey: episodesQueryKey,
-    queryFn: async () => {
-      const cached = await readCachedEpisodesWithin(subjectId, DETAIL_CACHE_MAX_AGE);
-      if (cached) return cached;
-
-      const stale = await readCachedEpisodes(subjectId);
-      if (stale) {
-        refreshQueryInBackground(queryClient, episodesQueryKey, fetchEpisodesFromNetwork);
-        return stale;
-      }
-
-      try {
-        return fetchEpisodesFromNetwork();
-      } catch {
-        return readCachedEpisodes(subjectId);
-      }
-    },
+    enabled: Boolean(subject) && (loadEpisodeData || (subject?.total_episodes ?? 0) <= 0),
+    queryFn: loadEpisodesFromCacheOrNetwork,
   });
 
   const collectionQueryKey = ["collection", subjectId] as const;
@@ -450,9 +492,11 @@ export default function SubjectDetailPage() {
     setLoading(true);
     let saved = false;
     try {
+      const episodePayload = episodeData ?? (await ensureEpisodesLoaded());
       const from = Math.min(currentEp, targetEp);
       const to = Math.max(currentEp, targetEp);
-      const ids = mainEps.slice(from, to).map((e) => e.id);
+      const episodeSource = episodePayload?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
+      const ids = episodeSource.filter((e) => e.type === 0).slice(from, to).map((e) => e.id);
       if (ids.length === 0 && from !== to) {
         throw new Error("Episode list is not ready");
       }
@@ -644,6 +688,7 @@ export default function SubjectDetailPage() {
       key: "ArrowRight",
       when: ({ isInput }) => !isInput && totalEp > 0,
       handler: () => {
+        void ensureEpisodesLoaded();
         setTargetEp((prev) => Math.min(totalEp, (prev ?? currentEp) + 1));
       },
     },
@@ -651,6 +696,7 @@ export default function SubjectDetailPage() {
       key: "ArrowLeft",
       when: ({ isInput }) => !isInput && totalEp > 0,
       handler: () => {
+        void ensureEpisodesLoaded();
         setTargetEp((prev) => Math.max(0, (prev ?? currentEp) - 1));
       },
     },
