@@ -4,15 +4,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import { getNextSeason, getNextSeasonInfo } from "@shared/api/anilist";
 import type { NextSeasonItem } from "@shared/api/anilist";
-import { searchAnimeSubject } from "@shared/api/client";
+import { searchSubjects } from "@shared/api/client";
 import { buildSubjectKeywords } from "@shared/pinyin-keywords";
 import {
   deleteCachedValuesByPrefixExcept,
   getPreferredSubjectCoverUrl,
   isUsefulImageUrl,
   readCachedSubject,
+  readCachedValue,
   readCachedValueEntry,
-  readCachedValueWithLegacy,
   writeCachedValue,
 } from "@shared/storage/sqlite-cache";
 import { isCacheStale, refreshQueryDataIfChanged } from "../api/stale-cache-refresh";
@@ -36,6 +36,11 @@ interface SeasonEntry extends NextSeasonItem {
   nameCn: string | null;
   bangumiId: number | null;
 }
+type BangumiMatchCache = {
+  query: string;
+  bangumiId: number | null;
+  nameCn: string | null;
+};
 
 function getWeekday(item: NextSeasonItem): number | null {
   if (item.airingAt) {
@@ -59,18 +64,31 @@ function formatDate(item: NextSeasonItem, seasonLabel: string): string {
   return seasonLabel;
 }
 
-const NEXT_SEASON_CACHE_PREFIX = "next-season-";
+const NEXT_SEASON_BASE_CACHE_PREFIX = "next-season-base-";
+const NEXT_SEASON_BANGUMI_MATCH_CACHE_PREFIX = "next-season-match-";
+const LEGACY_SQLITE_NEXT_SEASON_CACHE_PREFIX = "next-season-";
 const LEGACY_NEXT_SEASON_CACHE_PREFIX = "bangumini-next-season-";
-const NEXT_SEASON_CACHE_TTL = 1000 * 60 * 60 * 24; // 1 day
+const NEXT_SEASON_BASE_CACHE_TTL = 1000 * 60 * 60 * 24; // 1 day
+const NEXT_SEASON_BANGUMI_MATCH_TTL = 1000 * 60 * 60 * 24 * 30; // 30 days
+const NEXT_SEASON_BANGUMI_MATCH_CONCURRENCY = 4;
 
-function getNextSeasonCacheKey(): string {
+function getNextSeasonBaseCacheKey(): string {
   const { season, seasonYear } = getNextSeasonInfo();
-  return `${NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
+  return `${NEXT_SEASON_BASE_CACHE_PREFIX}${seasonYear}-${season}`;
+}
+
+function getLegacySqliteNextSeasonCacheKey(): string {
+  const { season, seasonYear } = getNextSeasonInfo();
+  return `${LEGACY_SQLITE_NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
 }
 
 function getLegacyNextSeasonCacheKey(): string {
   const { season, seasonYear } = getNextSeasonInfo();
   return `${LEGACY_NEXT_SEASON_CACHE_PREFIX}${seasonYear}-${season}`;
+}
+
+function getNextSeasonBangumiMatchCacheKey(anilistId: number): string {
+  return `${NEXT_SEASON_BANGUMI_MATCH_CACHE_PREFIX}${anilistId}`;
 }
 
 function readLegacyNextSeasonCache(): SeasonEntry[] | null {
@@ -85,16 +103,106 @@ function readLegacyNextSeasonCache(): SeasonEntry[] | null {
   }
 }
 
-function isAired(item: SeasonEntry): boolean {
+function isAired(item: Pick<NextSeasonItem, "airingAt" | "startDate">): boolean {
   const nowSec = Date.now() / 1000;
   if (item.airingAt && item.airingAt < nowSec) return true;
-  // For items without airingAt, check startDate
   const { year, month, day } = item.startDate;
   if (year && month && day) {
     const startSec = new Date(year, month - 1, day).getTime() / 1000;
     if (startSec < nowSec - 86400) return true; // more than 1 day past start
   }
   return false;
+}
+
+function isBangumiMatchCache(value: BangumiMatchCache | null): value is BangumiMatchCache {
+  return !!value
+    && typeof value.query === "string"
+    && (typeof value.bangumiId === "number" || value.bangumiId === null)
+    && (typeof value.nameCn === "string" || value.nameCn === null);
+}
+
+function toBaseNextSeasonItem(item: NextSeasonItem): NextSeasonItem {
+  return {
+    id: item.id,
+    title: item.title,
+    cover: item.cover,
+    startDate: item.startDate,
+    airingAt: item.airingAt,
+    episode: item.episode,
+    episodes: item.episodes,
+    format: item.format,
+  };
+}
+
+function filterUpcomingNextSeasonItems(items: NextSeasonItem[]) {
+  return items.filter((item) => !isAired(item)).map(toBaseNextSeasonItem);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function runWorker() {
+    while (true) {
+      const currentIndex = nextIndex;
+      if (currentIndex >= items.length) return;
+      nextIndex += 1;
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => runWorker()),
+  );
+
+  return results;
+}
+
+async function fetchBangumiMatch(item: NextSeasonItem): Promise<BangumiMatchCache> {
+  const resp = await searchSubjects({ keyword: item.title.native, type: [2], limit: 3 });
+  const match = resp.data?.[0];
+  return {
+    query: item.title.native,
+    bangumiId: match?.id ?? null,
+    nameCn: match ? (match.name_cn || match.name) : null,
+  };
+}
+
+async function fetchAndCacheNextSeasonBase(nextSeasonBaseCacheKey: string) {
+  const items = filterUpcomingNextSeasonItems(await getNextSeason());
+  await writeCachedValue(nextSeasonBaseCacheKey, items);
+  return items;
+}
+
+async function hydrateBangumiMatchCachesFromEntries(entries: SeasonEntry[]) {
+  const positiveMatches = entries.filter((entry) => entry.bangumiId !== null);
+  await Promise.all(
+    positiveMatches.map((entry) => writeCachedValue(
+      getNextSeasonBangumiMatchCacheKey(entry.id),
+      {
+        query: entry.title.native,
+        bangumiId: entry.bangumiId,
+        nameCn: entry.nameCn,
+      } satisfies BangumiMatchCache,
+    )),
+  );
+}
+
+async function migrateLegacyNextSeasonBaseCache(nextSeasonBaseCacheKey: string) {
+  const legacySqlite = await readCachedValue<SeasonEntry[]>(getLegacySqliteNextSeasonCacheKey());
+  const legacyEntries = legacySqlite ?? readLegacyNextSeasonCache();
+  if (!legacyEntries) return null;
+
+  const baseItems = filterUpcomingNextSeasonItems(legacyEntries);
+  await writeCachedValue(nextSeasonBaseCacheKey, baseItems);
+  await hydrateBangumiMatchCachesFromEntries(legacyEntries);
+  return baseItems;
 }
 
 async function applyCachedSubjectCovers(entries: SeasonEntry[]) {
@@ -137,30 +245,68 @@ function earliestEntryDay(entries: SeasonEntry[]): number | "tba" {
   return earliestDay;
 }
 
-async function fetchAndCacheNextSeason(nextSeasonCacheKey: string) {
-  const items = await getNextSeason();
-
-  const results = await Promise.allSettled(
-    items.map(async (item) => {
-      const weekday = getWeekday(item);
-      const bangumiMatch = await searchAnimeSubject(item.title.native);
-      return {
-        ...item,
-        weekday,
-        nameCn: bangumiMatch?.name_cn ?? null,
-        bangumiId: bangumiMatch?.id ?? null,
-      } as SeasonEntry;
-    }),
+async function resolveNextSeasonEntries(
+  baseItems: NextSeasonItem[],
+  options: { refreshMissingOrStaleMatches: boolean },
+) {
+  const cachedMatches = await Promise.all(
+    baseItems.map((item) => readCachedValueEntry<BangumiMatchCache>(getNextSeasonBangumiMatchCacheKey(item.id))),
   );
 
-  const enriched = results
-    .filter((r): r is PromiseFulfilledResult<SeasonEntry> => r.status === "fulfilled")
-    .map((r) => r.value)
-    .filter((e) => !isAired(e));
+  const matches: Array<BangumiMatchCache | null> = new Array(baseItems.length).fill(null);
+  const pendingMatches: Array<{ index: number; item: NextSeasonItem; fallback: BangumiMatchCache | null }> = [];
+  let needsBangumiRefresh = false;
 
-  const resolved = await applyCachedSubjectCovers(enriched);
-  await writeCachedValue(nextSeasonCacheKey, resolved.entries);
-  return resolved.entries;
+  for (let index = 0; index < baseItems.length; index += 1) {
+    const item = baseItems[index];
+    const cached = cachedMatches[index];
+    const payload = isBangumiMatchCache(cached?.payload ?? null) ? cached!.payload : null;
+    const stale = cached ? isCacheStale(cached.updatedAt, NEXT_SEASON_BANGUMI_MATCH_TTL) : true;
+    const titleChangedWithoutMatch = payload !== null
+      && payload.bangumiId === null
+      && payload.query !== item.title.native;
+    const shouldRefresh = !payload || stale || titleChangedWithoutMatch;
+
+    matches[index] = payload;
+    if (shouldRefresh) {
+      needsBangumiRefresh = true;
+      if (options.refreshMissingOrStaleMatches) {
+        pendingMatches.push({ index, item, fallback: payload });
+      }
+    }
+  }
+
+  if (options.refreshMissingOrStaleMatches && pendingMatches.length > 0) {
+    const refreshedMatches = await mapWithConcurrency(
+      pendingMatches,
+      NEXT_SEASON_BANGUMI_MATCH_CONCURRENCY,
+      async ({ item, fallback }) => {
+        try {
+          const nextMatch = await fetchBangumiMatch(item);
+          await writeCachedValue(getNextSeasonBangumiMatchCacheKey(item.id), nextMatch);
+          return nextMatch;
+        } catch {
+          return fallback;
+        }
+      },
+    );
+
+    pendingMatches.forEach((pending, index) => {
+      matches[pending.index] = refreshedMatches[index] ?? matches[pending.index];
+    });
+    needsBangumiRefresh = false;
+  }
+
+  const resolved = await applyCachedSubjectCovers(
+    baseItems.map((item, index) => ({
+      ...item,
+      weekday: getWeekday(item),
+      nameCn: matches[index]?.nameCn ?? null,
+      bangumiId: matches[index]?.bangumiId ?? null,
+    })),
+  );
+
+  return { entries: resolved.entries, needsBangumiRefresh };
 }
 
 export default function NextSeasonPage() {
@@ -194,41 +340,63 @@ export default function NextSeasonPage() {
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const isReturningFromDetail = useRef(initialState.isReturningFromDetail);
   const isFiltering = filterText !== "" || filterWeekday !== "";
-  const nextSeasonCacheKey = getNextSeasonCacheKey();
+  const nextSeasonBaseCacheKey = getNextSeasonBaseCacheKey();
   const nextSeasonQueryKey = ["next-season", seasonLabel] as const;
 
   const { data: rawEntries, isLoading, error } = useQuery({
     queryKey: nextSeasonQueryKey,
     queryFn: async () => {
-      await deleteCachedValuesByPrefixExcept(NEXT_SEASON_CACHE_PREFIX, nextSeasonCacheKey);
+      await deleteCachedValuesByPrefixExcept(NEXT_SEASON_BASE_CACHE_PREFIX, nextSeasonBaseCacheKey);
 
-      const cached = await readCachedValueEntry<SeasonEntry[]>(nextSeasonCacheKey);
-      if (cached) {
-        const stale = isCacheStale(cached.updatedAt, NEXT_SEASON_CACHE_TTL);
-        const resolved = await applyCachedSubjectCovers(cached.payload);
-        if (resolved.changed && !stale) await writeCachedValue(nextSeasonCacheKey, resolved.entries);
-        if (stale) {
+      let cachedBase = await readCachedValueEntry<NextSeasonItem[]>(nextSeasonBaseCacheKey);
+      if (!cachedBase) {
+        const migratedBase = await migrateLegacyNextSeasonBaseCache(nextSeasonBaseCacheKey);
+        if (migratedBase) {
+          cachedBase = await readCachedValueEntry<NextSeasonItem[]>(nextSeasonBaseCacheKey);
+        }
+      }
+
+      if (cachedBase) {
+        const baseItems = filterUpcomingNextSeasonItems(cachedBase.payload);
+        const staleBase = isCacheStale(cachedBase.updatedAt, NEXT_SEASON_BASE_CACHE_TTL);
+        const resolved = await resolveNextSeasonEntries(baseItems, { refreshMissingOrStaleMatches: false });
+
+        if (staleBase || resolved.needsBangumiRefresh) {
+          const refreshKey = staleBase
+            ? `${nextSeasonBaseCacheKey}:base`
+            : `${nextSeasonBaseCacheKey}:matches`;
           refreshQueryDataIfChanged({
             queryClient,
             queryKey: nextSeasonQueryKey,
-            refreshKey: nextSeasonCacheKey,
+            refreshKey,
             currentData: resolved.entries,
-            refresh: () => fetchAndCacheNextSeason(nextSeasonCacheKey),
+            refresh: async () => {
+              const refreshedBase = staleBase
+                ? await fetchAndCacheNextSeasonBase(nextSeasonBaseCacheKey)
+                : baseItems;
+              const nextResolved = await resolveNextSeasonEntries(refreshedBase, {
+                refreshMissingOrStaleMatches: true,
+              });
+              return nextResolved.entries;
+            },
           });
         }
+
         return resolved.entries;
       }
 
       try {
-        return await fetchAndCacheNextSeason(nextSeasonCacheKey);
+        const baseItems = await fetchAndCacheNextSeasonBase(nextSeasonBaseCacheKey);
+        const resolved = await resolveNextSeasonEntries(baseItems, {
+          refreshMissingOrStaleMatches: true,
+        });
+        return resolved.entries;
       } catch (err) {
-        const fallback = await readCachedValueWithLegacy<SeasonEntry[]>(
-          nextSeasonCacheKey,
-          readLegacyNextSeasonCache,
-        );
-        if (fallback) {
-          const resolved = await applyCachedSubjectCovers(fallback);
-          if (resolved.changed) await writeCachedValue(nextSeasonCacheKey, resolved.entries);
+        const migratedBase = await migrateLegacyNextSeasonBaseCache(nextSeasonBaseCacheKey);
+        if (migratedBase) {
+          const resolved = await resolveNextSeasonEntries(migratedBase, {
+            refreshMissingOrStaleMatches: false,
+          });
           return resolved.entries;
         }
         throw err;
