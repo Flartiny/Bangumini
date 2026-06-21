@@ -343,6 +343,9 @@ export default function CollectionsPage() {
     };
   }, []);
 
+  const collectionsCacheKey = `${COLLECTIONS_CACHE_PREFIX}${collectionType}-${uname}`;
+  const collectionsQueryKey = useMemo(() => ["collections", collectionType, uname] as const, [collectionType, uname]);
+
   useEffect(() => {
     const syncTodayDateKey = () => setTodayDateKey(getLocalDateString());
     const handleVisibilityChange = () => {
@@ -359,15 +362,61 @@ export default function CollectionsPage() {
     };
   }, [todayDateKey]);
 
-  // Detect return from subject detail page and invalidate if ep_status changed
+  // Detect return from subject detail page and update only the changed item
   useEffect(() => {
     const state = location.state as CollectionsLocationState | null;
-    if (state?.fromSubject && state?.subjectId) {
+    if (state?.fromSubject && state?.subjectId && uname) {
       let cancelled = false;
       void (async () => {
-        await deleteCachedValuesByPrefix(COLLECTIONS_CACHE_PREFIX);
-        if (!cancelled) {
-          await queryClient.invalidateQueries({ queryKey: ["collections"] });
+        // Get the updated collection from the detail page's cache
+        const updatedCollection = queryClient.getQueryData<UserCollection>(["collection", state.subjectId]);
+
+        // Get the current collections list
+        const currentData = queryClient.getQueryData<PagedResponse<UserCollection>>(collectionsQueryKey);
+
+        if (currentData?.data && updatedCollection) {
+          // Create updated list
+          let updatedList = [...currentData.data];
+          const itemIndex = updatedList.findIndex((item) => item.subject_id === state.subjectId);
+
+          // Check if collection type matches current tab
+          const typeMatches = updatedCollection.type === parseInt(collectionType);
+
+          if (itemIndex >= 0) {
+            if (typeMatches) {
+              // Update in place
+              updatedList[itemIndex] = updatedCollection;
+            } else {
+              // Type changed - remove from current list
+              updatedList.splice(itemIndex, 1);
+            }
+          } else if (typeMatches) {
+            // New item for this collection type - add it
+            updatedList = [updatedCollection, ...updatedList];
+          }
+
+          const updatedData = {
+            ...currentData,
+            data: updatedList,
+            total: itemIndex >= 0 && !typeMatches
+              ? Math.max(0, (currentData.total ?? currentData.data.length) - 1)
+              : itemIndex < 0 && typeMatches
+              ? (currentData.total ?? currentData.data.length) + 1
+              : currentData.total,
+          };
+
+          // Write to SQLite cache
+          await writeCachedValue(collectionsCacheKey, updatedData);
+
+          if (!cancelled) {
+            // Invalidate only this specific query to trigger refetch from fresh cache
+            await queryClient.invalidateQueries({ queryKey: collectionsQueryKey, exact: true });
+          }
+        } else if (!currentData?.data) {
+          // No existing data - fall back to full invalidation
+          if (!cancelled) {
+            await queryClient.invalidateQueries({ queryKey: collectionsQueryKey, exact: true });
+          }
         }
       })();
       window.history.replaceState({}, document.title);
@@ -378,10 +427,7 @@ export default function CollectionsPage() {
         window.clearTimeout(timer);
       };
     }
-  }, [location, queryClient]);
-
-  const collectionsCacheKey = `${COLLECTIONS_CACHE_PREFIX}${collectionType}-${uname}`;
-  const collectionsQueryKey = ["collections", collectionType, uname] as const;
+  }, [location, queryClient, collectionType, uname, collectionsQueryKey, collectionsCacheKey]);
 
   const {
     data: collData,
