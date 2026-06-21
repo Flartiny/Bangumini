@@ -308,6 +308,7 @@ export default function CollectionsPage() {
   const [committedState, setCommittedState] = useState<CommittedCollectionsState | null>(null);
   const [querySources, setQuerySources] = useState<QuerySourceState>({});
   const [backgroundRefreshCount, setBackgroundRefreshCount] = useState(0);
+  const [shouldSuppressRefetch, setShouldSuppressRefetch] = useState(initialState.isReturningFromDetail);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
   const isWatching = collectionType === "3";
   const today = useMemo(() => getBangumiWeekdayFromDateKey(todayDateKey), [todayDateKey]);
@@ -409,11 +410,11 @@ export default function CollectionsPage() {
           await writeCachedValue(collectionsCacheKey, updatedData);
 
           if (!cancelled) {
-            // Invalidate only this specific query to trigger refetch from fresh cache
-            await queryClient.invalidateQueries({ queryKey: collectionsQueryKey, exact: true });
+            // Update React Query cache directly without triggering refetch
+            queryClient.setQueryData(collectionsQueryKey, updatedData);
           }
         } else if (!currentData?.data) {
-          // No existing data - fall back to full invalidation
+          // No existing data - fall back to invalidation to trigger fresh fetch
           if (!cancelled) {
             await queryClient.invalidateQueries({ queryKey: collectionsQueryKey, exact: true });
           }
@@ -421,7 +422,10 @@ export default function CollectionsPage() {
       })();
       window.history.replaceState({}, document.title);
       // Reset the flag after other effects have run
-      const timer = window.setTimeout(() => { isReturningFromDetail.current = false; }, 100);
+      const timer = window.setTimeout(() => {
+        isReturningFromDetail.current = false;
+        setShouldSuppressRefetch(false);
+      }, 100);
       return () => {
         cancelled = true;
         window.clearTimeout(timer);
@@ -478,6 +482,7 @@ export default function CollectionsPage() {
     },
     enabled: !!uname,
     staleTime: 0,
+    refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
   const {
@@ -525,6 +530,7 @@ export default function CollectionsPage() {
     },
     enabled: isWatching,
     staleTime: 0,
+    refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
   const rawCollections = collData?.data ?? EMPTY_COLLECTIONS;
@@ -601,6 +607,7 @@ export default function CollectionsPage() {
     },
     enabled: shouldLoadAiringTimes,
     refetchOnWindowFocus: "always",
+    refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
   const airingTimeMap = airingTimeMapData ?? EMPTY_AIRING_TIME_MAP;
@@ -684,6 +691,7 @@ export default function CollectionsPage() {
     enabled: shouldLoadEpisodes,
     staleTime: EPISODES_CACHE_MAX_AGE,
     refetchOnWindowFocus: "always",
+    refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
   const airedEpMap = episodeMap ?? EMPTY_EPISODE_MAP;
