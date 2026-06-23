@@ -942,6 +942,7 @@ export default function CollectionsPage() {
   const paged = filtered.slice((page - 1) * LIMIT, page * LIMIT);
 
   useEffect(() => {
+    if (filtered.length === 0) return;
     const total = Math.max(1, Math.ceil(filtered.length / LIMIT));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage((p) => Math.min(p, total));

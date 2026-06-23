@@ -590,10 +590,8 @@ function SubjectDetailContent({ subjectId }: { subjectId: number }) {
 
   const handleBack = useCallback(() => {
     const state = location.state as { fromCollections?: boolean; fromCalendar?: boolean; fromNextSeason?: boolean; page?: number; focusedIndex?: number; currentDay?: number | "tba" } | null;
-    const currentEpStatus = collection?.ep_status ?? 0;
-    const hasChanged = collectionChangedRef.current || (initialEpStatus.current !== null && initialEpStatus.current !== currentEpStatus);
 
-    if (state?.fromCollections && hasChanged) {
+    if (state?.fromCollections) {
       navigate("/collections", { state: { fromSubject: true, subjectId, page: state.page, focusedIndex: state.focusedIndex } });
     } else if (state?.fromCalendar) {
       navigate("/calendar", { state: { fromSubject: true, subjectId, currentDay: state.currentDay, focusedIndex: state.focusedIndex } });
@@ -602,7 +600,7 @@ function SubjectDetailContent({ subjectId }: { subjectId: number }) {
     } else {
       navigate(-1);
     }
-  }, [collection, location, navigate, subjectId]);
+  }, [location, navigate, subjectId]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts([
