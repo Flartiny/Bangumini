@@ -17,9 +17,8 @@ import type { SubjectSmall } from "@shared/api/types";
 import { getSubjectTitleForCopy } from "../api/subject-title-copy";
 import { SubjectRow, Rating, Meta } from "../components/SubjectRow";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
-import { isCacheStale, refreshQueryDataIfChanged } from "../api/stale-cache-refresh";
+import { refreshQueryDataIfChanged } from "../api/stale-cache-refresh";
 
-const QUERY_CACHE_MAX_AGE = 1000 * 60 * 60 * 24;
 const CALENDAR_QUERY_KEY = ["calendar"] as const;
 
 type CalendarLocationState = {
@@ -74,15 +73,13 @@ export default function CalendarPage() {
     queryFn: async () => {
       const cached = await readCachedValueEntry<CalendarItem[]>("calendar");
       if (cached) {
-        if (isCacheStale(cached.updatedAt, QUERY_CACHE_MAX_AGE)) {
-          refreshQueryDataIfChanged({
-            queryClient,
-            queryKey: CALENDAR_QUERY_KEY,
-            refreshKey: "calendar",
-            currentData: cached.payload,
-            refresh: fetchAndCacheCalendar,
-          });
-        }
+        refreshQueryDataIfChanged({
+          queryClient,
+          queryKey: CALENDAR_QUERY_KEY,
+          refreshKey: "calendar",
+          currentData: cached.payload,
+          refresh: fetchAndCacheCalendar,
+        });
         return cached.payload;
       }
 
@@ -98,6 +95,7 @@ export default function CalendarPage() {
       }
     },
     staleTime: 0,
+    refetchOnWindowFocus: "always",
   });
 
   // Build flat list of all items with their weekday context

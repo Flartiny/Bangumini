@@ -1,11 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { tauriFetch, isTauri } from "./api/tauri-fetch";
 import { setFetchFunction as setBangumiFetchFunction } from "@shared/api/client";
 import { setFetchFunction as setAniListFetchFunction } from "@shared/api/anilist";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import "./index.css";
 
@@ -37,6 +38,16 @@ if (isTauri()) {
 
 // Disable right-click context menu
 document.addEventListener("contextmenu", (e) => e.preventDefault());
+
+// Bridge Tauri window focus events to React Query's focusManager.
+// React Query's default focus listener relies on browser `focus`/`visibilitychange`
+// events, which Tauri doesn't fire when the window is programmatically shown/hidden
+// (e.g. via global shortcut or tray click).
+if (isTauri()) {
+  getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    focusManager.setFocused(focused);
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -34,7 +34,7 @@ import {
   writeCachedValue,
 } from "@shared/storage/sqlite-cache";
 import { getUsername } from "../api/oauth";
-import { isCacheStale, refreshQueryDataIfChanged } from "../api/stale-cache-refresh";
+import { refreshQueryDataIfChanged } from "../api/stale-cache-refresh";
 import { getSubjectTitleForCopy } from "../api/subject-title-copy";
 import {
   COLLECTION_TASK_EVENT,
@@ -592,19 +592,17 @@ export default function CollectionsPage() {
       const cached = await readCachedValueEntry<PagedResponse<UserCollection>>(collectionsCacheKey);
       if (cached) {
         setQuerySource("collections", collectionsCacheKey, "cache");
-        if (isCacheStale(cached.updatedAt, QUERY_CACHE_MAX_AGE)) {
-          const refreshTask = refreshQueryDataIfChanged({
-            queryClient,
-            queryKey: collectionsQueryKey,
-            refreshKey: collectionsCacheKey,
-            currentData: cached.payload,
-            refresh: () => fetchAndCacheCollections(collectionType, uname, collectionsCacheKey),
-          });
-          trackBackgroundRefresh(refreshTask?.then((changed) => {
-            if (changed) setQuerySource("collections", collectionsCacheKey, "network");
-            return changed;
-          }) ?? null);
-        }
+        const refreshTask = refreshQueryDataIfChanged({
+          queryClient,
+          queryKey: collectionsQueryKey,
+          refreshKey: collectionsCacheKey,
+          currentData: cached.payload,
+          refresh: () => fetchAndCacheCollections(collectionType, uname, collectionsCacheKey),
+        });
+        trackBackgroundRefresh(refreshTask?.then((changed) => {
+          if (changed) setQuerySource("collections", collectionsCacheKey, "network");
+          return changed;
+        }) ?? null);
         return cached.payload;
       }
 
@@ -626,6 +624,7 @@ export default function CollectionsPage() {
     },
     enabled: !!uname,
     staleTime: 0,
+    refetchOnWindowFocus: "always",
     refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
@@ -640,19 +639,17 @@ export default function CollectionsPage() {
       const cached = await readCachedValueEntry<CalendarItem[]>("calendar");
       if (cached) {
         setQuerySource("calendar", "calendar", "cache");
-        if (isCacheStale(cached.updatedAt, QUERY_CACHE_MAX_AGE)) {
-          const refreshTask = refreshQueryDataIfChanged({
-            queryClient,
-            queryKey: CALENDAR_QUERY_KEY,
-            refreshKey: "calendar",
-            currentData: cached.payload,
-            refresh: fetchAndCacheCalendar,
-          });
-          trackBackgroundRefresh(refreshTask?.then((changed) => {
-            if (changed) setQuerySource("calendar", "calendar", "network");
-            return changed;
-          }) ?? null);
-        }
+        const refreshTask = refreshQueryDataIfChanged({
+          queryClient,
+          queryKey: CALENDAR_QUERY_KEY,
+          refreshKey: "calendar",
+          currentData: cached.payload,
+          refresh: fetchAndCacheCalendar,
+        });
+        trackBackgroundRefresh(refreshTask?.then((changed) => {
+          if (changed) setQuerySource("calendar", "calendar", "network");
+          return changed;
+        }) ?? null);
         return cached.payload;
       }
 
@@ -674,6 +671,7 @@ export default function CollectionsPage() {
     },
     enabled: isWatching,
     staleTime: 0,
+    refetchOnWindowFocus: "always",
     refetchOnMount: shouldSuppressRefetch ? false : true,
   });
 
