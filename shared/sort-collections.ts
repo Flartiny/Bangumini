@@ -10,7 +10,7 @@ function weekdayOffset(weekday: number, today: number): number {
 }
 
 function getTotalEp(c: UserCollection): number {
-  return c.subject.total_episodes || c.subject.eps || 0;
+  return c.subject.eps || c.subject.total_episodes || 0;
 }
 
 export type SortedGroup = "airing_not_caught" | "finished" | "completed" | "airing_caught";

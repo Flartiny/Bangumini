@@ -480,7 +480,7 @@ function SubjectDetailContent({ subjectId }: { subjectId: number }) {
 
   const sorted = episodeData?.data?.slice().sort((a, b) => a.sort - b.sort) ?? [];
   const mainEps = sorted.filter((e) => e.type === 0);
-  const totalEp = mainEps.length > 0 ? mainEps.length : (subject?.total_episodes ?? 0);
+  const totalEp = mainEps.length > 0 ? mainEps.length : (subject?.eps ?? 0);
   const currentEp = collection?.ep_status ?? 0;
   const currentColType = collection?.type;
   const displayTarget = targetEp ?? currentEp;
